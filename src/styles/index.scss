@@ -1,0 +1,37 @@
+@import './variables.scss';
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 14px;
+  color: #303133;
+  background: $page-bg;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: $primary;
+  text-decoration: none;
+}
+
+.card {
+  background: #fff;
+  border-radius: $radius;
+  padding: 16px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+  margin-bottom: 16px;
+}
+
+.text-success { color: $success; }
+.text-warning { color: $warning; }
+.text-danger  { color: $danger; }
