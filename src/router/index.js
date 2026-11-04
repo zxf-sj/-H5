@@ -12,11 +12,32 @@ VueRouter.prototype.push = function push(location) {
 const routes = [
   { path: '/', name: 'Home', component: () => import('@/views/Home.vue'), meta: { title: '首页' } },
   { path: '/bus-admin', name: 'BusAdmin', component: () => import('@/views/BusAdmin.vue'), meta: { title: '巴士管理' } },
+  { path: '/bus-order', name: 'BusOrderFlow', component: () => import('@/views/BusOrderFlow.vue'), meta: { title: '巴士下单' } },
   { path: '/about', name: 'About', component: () => import('@/views/About.vue'), meta: { title: '关于' } },
   { path: '/demo', name: 'ApiDemo', component: () => import('@/views/ApiDemo.vue'), meta: { title: '接口 Demo' } },
   { path: '/settings', name: 'Settings', component: () => import('@/views/Settings.vue'), meta: { title: '系统配置' } },
   { path: '*', redirect: '/' }
 ];
+// const routes = [
+//   { path: '/', redirect: '/bus-admin' }, // 默认首页：巴士管理
+//   { path: '/bus-admin', name: 'BusAdmin', component: () => import('@/views/BusAdmin.vue'), meta: { title: '巴士管理' } },
+//   { path: '/index', name: 'Home', component: () => import('@/views/Home.vue'), meta: { title: '首页' } },
+//   { path: '/bus-order', name: 'BusOrderFlow', component: () => import('@/views/BusOrderFlow.vue'), meta: { title: '巴士下单' } },
+//   { path: '/about', name: 'About', component: () => import('@/views/About.vue'), meta: { title: '关于' } },
+//   { path: '/demo', name: 'ApiDemo', component: () => import('@/views/ApiDemo.vue'), meta: { title: '接口 Demo' } },
+//   { path: '/settings', name: 'Settings', component: () => import('@/views/Settings.vue'), meta: { title: '系统配置' } },
+//   { path: '*', redirect: '/bus-admin' }
+// ];
+// const routes = [
+//   { path: '/', redirect: '/bus-order' }, // 默认首页：巴士下单
+//   { path: '/bus-order', name: 'BusOrderFlow', component: () => import('@/views/BusOrderFlow.vue'), meta: { title: '巴士下单' } },
+//   { path: '/index', name: 'Home', component: () => import('@/views/Home.vue'), meta: { title: '首页' } },
+//   { path: '/bus-admin', name: 'BusAdmin', component: () => import('@/views/BusAdmin.vue'), meta: { title: '巴士管理' } },
+//   { path: '/about', name: 'About', component: () => import('@/views/About.vue'), meta: { title: '关于' } },
+//   { path: '/demo', name: 'ApiDemo', component: () => import('@/views/ApiDemo.vue'), meta: { title: '接口 Demo' } },
+//   { path: '/settings', name: 'Settings', component: () => import('@/views/Settings.vue'), meta: { title: '系统配置' } },
+//   { path: '*', redirect: '/bus-order' }
+// ];
 
 // 生产构建产物会被内联为单文件并用 file:// 直接打开，
 // history 模式在 file:// 下不可用，统一使用 hash 模式。

@@ -3,13 +3,22 @@
     <div class="card">
       <div class="card-head">
         <span class="card-head__title">巴士订单</span>
-        <el-button
-          type="primary"
-          size="mini"
-          plain
-          @click="$router.push('/bus-admin')"
-          >巴士管理</el-button
-        >
+        <!-- <div>
+          <el-button
+            type="primary"
+            size="mini"
+            plain
+            @click="$router.push('/bus-order')"
+            >巴士下单</el-button
+          >
+          <el-button
+            type="primary"
+            size="mini"
+            plain
+            @click="$router.push('/bus-admin')"
+            >巴士管理</el-button
+          >
+        </div> -->
       </div>
       <el-form :inline="true" size="small">
         <el-form-item label="筛选时间段" size="mini">
@@ -57,6 +66,7 @@
             </el-option>
           </el-select>
         </el-form-item>
+
         <el-form-item size="mini">
           <el-button type="primary" @click="getDataList" size="mini"
             >查询</el-button
@@ -78,8 +88,8 @@
           label="司机手机号"
           align="center"
         />
-        <el-table-column prop="Vehicle_No" label="车牌号" align="center" />
-        <el-table-column prop="TicketNum" label="乘客人数" align="center" />
+        <el-table-column prop="Vehicle_Name" label="车牌号" align="center" />
+        <el-table-column prop="AdultNum" label="乘客人数" align="center" />
         <el-table-column
           prop="OrderSource_Name"
           label="订单来源"
@@ -100,6 +110,7 @@
           label="付款状态"
           align="center"
         />
+        <el-table-column prop="PayType_Name" label="支付方式" align="center" />
         <el-table-column
           prop="StatingLocation_Name"
           label="出发地点"
@@ -116,13 +127,26 @@
           label="下单人手机号"
           align="center"
         />
-        <el-table-column fixed="right" label="操作" width="130" align="center">
+        <el-table-column fixed="right" label="操作" width="220" align="center">
           <template slot-scope="scope">
             <el-button @click="handleDetail(scope.row)" type="text" size="small"
               >查看</el-button
             >
-            <el-button type="text" size="small">修改</el-button>
-            <el-button type="text" size="small">退款</el-button>
+            <el-button @click="handleEdit(scope.row)" type="text" size="small"
+              >修改</el-button
+            >
+            <el-button
+              @click="handleCancelRefund(scope.row)"
+              type="text"
+              size="small"
+              >取消退款</el-button
+            >
+            <el-button
+              @click="handleTsRefund(scope.row)"
+              type="text"
+              size="small"
+              >特殊退款</el-button
+            >
           </template>
         </el-table-column>
       </el-table>
@@ -189,7 +213,7 @@
                 detail.PassengerPhone || '-'
               }}</el-descriptions-item>
               <el-descriptions-item label="乘客人数"
-                >{{ detail.TicketNum || 0 }} 人</el-descriptions-item
+                >{{ detail.AdultNum || 0 }} 人</el-descriptions-item
               >
               <el-descriptions-item label="出发时间">{{
                 detail.DepartureTime_DateTime ||
@@ -235,7 +259,8 @@
                 >¥ {{ formatMoney(detail.TotalAmount) }}</el-descriptions-item
               >
               <el-descriptions-item label="优惠金额"
-                >¥ {{ formatMoney(detail.DiscountAmount) }}</el-descriptions-item
+                >¥
+                {{ formatMoney(detail.DiscountAmount) }}</el-descriptions-item
               >
               <el-descriptions-item label="实付金额"
                 >¥ {{ formatMoney(detail.PayAmount) }}</el-descriptions-item
@@ -323,6 +348,412 @@
         <el-button size="small" @click="detailVisible = false">关闭</el-button>
       </span>
     </el-dialog>
+
+    <!-- 修改订单弹窗 -->
+    <el-dialog
+      title="修改订单"
+      :visible.sync="editVisible"
+      width="860px"
+      top="6vh"
+      :close-on-click-modal="false"
+      @closed="handleEditClosed"
+    >
+      <div v-loading="editLoading" class="edit-body">
+        <el-form :model="editForm" label-width="90px" size="mini">
+          <div class="detail-section">
+            <div class="detail-section__title">基本信息</div>
+            <el-row :gutter="8">
+              <el-col :span="8">
+                <el-form-item label="巴士线路">
+                  <el-select
+                    v-model="editForm.LineId"
+                    filterable
+                    placeholder="选择线路"
+                    class="full"
+                    @change="onEditLineChange"
+                  >
+                    <el-option
+                      v-for="item in busLineList"
+                      :key="item.Id"
+                      :label="item.LineName"
+                      :value="item.Id"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="16">
+                <el-form-item label="班次">
+                  <el-select
+                    v-model="editForm.ScheduleId"
+                    filterable
+                    placeholder="选择班次"
+                    class="full"
+                    :loading="scheduleLoading"
+                  >
+                    <el-option
+                      v-for="item in scheduleList"
+                      :key="item.Id"
+                      :label="
+                        (item.DepartureTime || '') +
+                        ' ' +
+                        (item.StatingLocation_Name || '')
+                      "
+                      :value="item.Id"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="8">
+              <el-col :span="8">
+                <el-form-item label="出发地点">
+                  <el-select
+                    v-model="editForm.StatingLocation"
+                    filterable
+                    placeholder="选择站点"
+                    class="full"
+                    :loading="editSiteLoading"
+                  >
+                    <el-option
+                      v-for="item in editBoardSites"
+                      :key="item.Id"
+                      :label="item.LocationName"
+                      :value="item.Id"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="到达地点">
+                  <el-select
+                    v-model="editForm.EndLocation"
+                    filterable
+                    placeholder="选择站点"
+                    class="full"
+                    :loading="editSiteLoading"
+                  >
+                    <el-option
+                      v-for="item in editAlightSites"
+                      :key="item.Id"
+                      :label="item.LocationName"
+                      :value="item.Id"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="乘客手机号">
+                  <el-input
+                    v-model="editForm.PassengerPhone"
+                    maxlength="11"
+                    placeholder="乘客手机号"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="8">
+              <el-col :span="8">
+                <el-form-item label="订单状态">
+                  <el-select
+                    v-model="editForm.OrderStatus"
+                    placeholder="请选择"
+                    class="full"
+                  >
+                    <el-option
+                      v-for="item in busOrderStateList"
+                      :key="item.Value"
+                      :label="item.Text"
+                      :value="item.Value"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="付款状态">
+                  <el-select
+                    v-model="editForm.PayStatus"
+                    placeholder="请选择"
+                    class="full"
+                  >
+                    <el-option
+                      v-for="item in busPayStatusList"
+                      :key="item.Value"
+                      :label="item.Text"
+                      :value="item.Value"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="支付方式">
+                  <el-select
+                    v-model="editForm.PayType"
+                    placeholder="请选择"
+                    class="full"
+                  >
+                    <el-option
+                      v-for="item in payTypeOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </div>
+
+          <div class="detail-section">
+            <div class="detail-section__title">金额与人数</div>
+            <el-row :gutter="8">
+              <el-col :span="6">
+                <el-form-item label="票价">
+                  <el-input-number
+                    v-model="editForm.TicketPrice"
+                    :min="0"
+                    :precision="2"
+                    :controls="false"
+                    class="full"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="订单金额">
+                  <el-input-number
+                    v-model="editForm.TotalAmount"
+                    :min="0"
+                    :precision="2"
+                    :controls="false"
+                    class="full"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="优惠金额">
+                  <el-input-number
+                    v-model="editForm.DiscountAmount"
+                    :min="0"
+                    :precision="2"
+                    :controls="false"
+                    class="full"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="实付金额">
+                  <el-input-number
+                    v-model="editForm.PayAmount"
+                    :min="0"
+                    :precision="2"
+                    :controls="false"
+                    class="full"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="8">
+              <el-col :span="8">
+                <el-form-item label="成人数">
+                  <el-input-number
+                    v-model="editForm.AdultNum"
+                    :min="0"
+                    :controls="false"
+                    class="full"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="儿童数">
+                  <el-input-number
+                    v-model="editForm.Children"
+                    :min="0"
+                    :controls="false"
+                    class="full"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="乘客人数">
+                  <el-input :value="editTicketNum" disabled />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </div>
+
+          <div class="detail-section">
+            <div class="detail-section__title">
+              乘车人（{{ editPassengers.length }} 人）
+              <el-button
+                type="text"
+                size="mini"
+                class="pax-add"
+                @click="addEditPassenger"
+                >+ 添加乘车人</el-button
+              >
+            </div>
+            <div
+              v-for="(item, index) in editPassengers"
+              :key="index"
+              class="pax-row"
+            >
+              <el-input
+                v-model="item.Name"
+                size="mini"
+                placeholder="姓名"
+                class="pax__name"
+              />
+              <el-input
+                v-model="item.Phone"
+                size="mini"
+                maxlength="11"
+                placeholder="手机号"
+                class="pax__phone"
+              />
+              <el-input
+                v-model="item.IdCard"
+                size="mini"
+                placeholder="身份证号"
+                class="pax__idcard"
+              />
+              <el-button
+                v-if="editPassengers.length > 1"
+                type="text"
+                size="mini"
+                @click="removeEditPassenger(index)"
+                >删除</el-button
+              >
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <div class="detail-section__title">其他</div>
+            <el-row :gutter="8">
+              <el-col :span="12">
+                <el-form-item label="取消原因">
+                  <el-input
+                    v-model="editForm.CancelReason"
+                    placeholder="取消原因（选填）"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="备注">
+                  <el-input
+                    v-model="editForm.Remark"
+                    placeholder="备注（选填）"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </div>
+        </el-form>
+      </div>
+      <span slot="footer">
+        <el-button size="small" @click="editVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          size="small"
+          :loading="editSubmitting"
+          @click="submitEdit"
+          >保存修改</el-button
+        >
+      </span>
+    </el-dialog>
+
+    <!-- 取消订单并退款 -->
+    <el-dialog
+      title="取消订单并退款"
+      :visible.sync="cancelVisible"
+      width="520px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="cancelForm" label-width="90px" size="mini">
+        <el-form-item label="订单号">
+          <el-input :value="cancelForm.OrderNo" disabled />
+        </el-form-item>
+        <el-form-item label="实付金额">
+          <el-input
+            :value="'¥ ' + formatMoney(cancelForm.PayAmount)"
+            disabled
+          />
+        </el-form-item>
+        <el-form-item label="退款方式">
+          <el-radio-group v-model="cancelForm.RefundType">
+            <el-radio :label="false">扣30%（退款70%）</el-radio>
+            <el-radio :label="true">全额退款</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="取消原因">
+          <el-input
+            v-model="cancelForm.tag"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入取消原因"
+          />
+        </el-form-item>
+        <div class="refund-preview" v-if="cancelForm.RefundType === false">
+          预计退款金额：<span class="amount">¥ {{ cancelRefundPreview }}</span
+          >（实付 70%）
+        </div>
+        <div class="refund-preview" v-else>
+          预计退款金额：<span class="amount">¥ {{ cancelRefundPreview }}</span
+          >（全额）
+        </div>
+      </el-form>
+      <span slot="footer">
+        <el-button size="small" @click="cancelVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          size="small"
+          :loading="cancelSubmitting"
+          @click="submitCancel"
+          >确认取消并退款</el-button
+        >
+      </span>
+    </el-dialog>
+
+    <!-- 特殊退款 -->
+    <el-dialog
+      title="特殊退款"
+      :visible.sync="tsRefundVisible"
+      width="460px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="tsRefundForm" label-width="90px" size="mini">
+        <el-form-item label="订单号">
+          <el-input :value="tsRefundForm.OrderNo" disabled />
+        </el-form-item>
+        <el-form-item label="实付金额">
+          <el-input
+            :value="'¥ ' + formatMoney(tsRefundForm.PayAmount)"
+            disabled
+          />
+        </el-form-item>
+        <el-form-item label="退款金额">
+          <el-input-number
+            v-model="tsRefundForm.RefundAmount"
+            :min="0.01"
+            :max="tsRefundForm.PayAmount || 99999"
+            :precision="2"
+            :step="1"
+            :controls="false"
+            class="full"
+          />
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button size="small" @click="tsRefundVisible = false"
+          >取消</el-button
+        >
+        <el-button
+          type="primary"
+          size="small"
+          :loading="tsRefundSubmitting"
+          @click="submitTsRefund"
+          >确认退款</el-button
+        >
+      </span>
+    </el-dialog>
   </div>
 </template>
 
@@ -360,6 +791,61 @@ export default {
         pageIndex: 1,
         pageSize: 10,
       },
+      // —— 修改订单 ——
+      editVisible: false,
+      editLoading: false,
+      editSubmitting: false,
+      editForm: {
+        Id: '',
+        LineId: null,
+        ScheduleId: null,
+        PassengerPhone: '',
+        TotalAmount: 0,
+        DiscountAmount: 0,
+        PayAmount: 0,
+        TicketPrice: 0,
+        PayStatus: 0,
+        PayType: 1,
+        CancelReason: '',
+        Remark: '',
+        OrderStatus: 0,
+        StatingLocation: null,
+        EndLocation: null,
+        AdultNum: 0,
+        Children: 0,
+        PersonNum: 0,
+      },
+      editPassengers: [{ Name: '', Phone: '', IdCard: '' }],
+      editDeparture: '', // 订单原出发时间，用于按日期拉班次
+      scheduleList: [], // 班次下拉
+      scheduleLoading: false,
+      allSites: [], // 全量站点，编辑回填反查用
+      editBoardSites: [], // 修改订单：出发地点下拉（GetBusLineSiteInfo 按线路返回）
+      editAlightSites: [], // 修改订单：到达地点下拉
+      editSiteLoading: false,
+      payTypeOptions: [
+        { value: 1, label: '微信支付' },
+        { value: 2, label: '云闪付' },
+      ],
+      // —— 取消订单并退款 ——
+      cancelVisible: false,
+      cancelSubmitting: false,
+      cancelForm: {
+        Id: '',
+        OrderNo: '',
+        PayAmount: 0,
+        RefundType: false,
+        tag: '',
+      },
+      // —— 特殊退款 ——
+      tsRefundVisible: false,
+      tsRefundSubmitting: false,
+      tsRefundForm: {
+        Id: '',
+        OrderNo: '',
+        PayAmount: 0,
+        RefundAmount: 0,
+      },
     }
   },
   computed: {
@@ -370,6 +856,19 @@ export default {
     // 操作日志
     logList() {
       return (this.detail && this.detail.loglist) || []
+    },
+    // 编辑表单：乘客人数 = 成人数 + 儿童数
+    editTicketNum() {
+      return (
+        (Number(this.editForm.AdultNum) || 0) +
+        (Number(this.editForm.Children) || 0)
+      )
+    },
+    // 取消退款预计金额：RefundType=false 扣30%=退70%；true 全退
+    cancelRefundPreview() {
+      const pay = Number(this.cancelForm.PayAmount) || 0
+      const amt = this.cancelForm.RefundType ? pay : pay * 0.7
+      return amt.toFixed(2)
     },
     // 订单状态标签色：接口只给中文名，这里按关键词兜底映射
     orderStatusTagType() {
@@ -568,6 +1067,422 @@ export default {
         this.loading = false
       }
     },
+
+    /* ===== 修改订单 ===== */
+    // 打开修改弹窗：拉详情回填，并按需加载站点/班次
+    async handleEdit(row) {
+      if (!row || !row.Id) return
+      this.editVisible = true
+      this.editLoading = true
+      if (!this.allSites.length) this.loadAllSites()
+      let detail = null
+      try {
+        const data = await request({
+          url: '/BusOrder/GetBusOrderInfo',
+          method: 'get',
+          params: { Id: row.Id },
+        })
+        detail = data.data || null
+      } catch (e) {
+        // 详情拉取失败时退回用行数据回填
+        detail = null
+      }
+      this.prefillEdit(detail, row)
+      this.editLoading = false
+      if (this.editForm.LineId != null) {
+        this.loadEditSchedules()
+        // 出发/到达地点下拉：按订单线路拉站点详情
+        this.loadEditSites()
+      }
+    },
+    // 详情/行数据回填编辑表单：优先取原始字段，缺失时按 *_Name 反查下拉选项
+    prefillEdit(d, row) {
+      console.log('prefillEdit', d, row)
+      const src = d || row || {}
+      const num = (v) =>
+        v === null || v === undefined || v === '' ? 0 : Number(v) || 0
+      this.editForm = {
+        Id: src.Id || row.Id,
+        LineId:
+          src.LineId != null
+            ? src.LineId
+            : this.matchId(this.busLineList, src.Line_Name, 'Id', 'LineName'),
+        ScheduleId: src.ScheduleId != null ? src.ScheduleId : null,
+        PassengerPhone: src.PassengerPhone || '',
+        TotalAmount: num(src.TotalAmount),
+        DiscountAmount: num(src.DiscountAmount),
+        PayAmount: num(src.PayAmount),
+        TicketPrice: num(src.TicketPrice),
+        PayStatus:
+          src.PayStatus != null
+            ? src.PayStatus
+            : this.matchId(
+                this.busPayStatusList,
+                src.PayStatus_Name,
+                'Value',
+                'Text',
+              ),
+        PayType: src.PayType != null ? Number(src.PayType) : 1,
+        CancelReason: src.CancelReason || '',
+        Remark: src.Remark || src.Note || '',
+        OrderStatus:
+          src.OrderStatus != null
+            ? src.OrderStatus
+            : this.matchId(
+                this.busOrderStateList,
+                src.OrderStatus_Name,
+                'Value',
+                'Text',
+              ),
+        StatingLocation:
+          src.StatingLocation != null
+            ? src.StatingLocation
+            : this.matchId(
+                this.allSites,
+                src.StatingLocation_Name,
+                'Id',
+                'LocationName',
+              ),
+        EndLocation:
+          src.EndLocation != null
+            ? src.EndLocation
+            : this.matchId(
+                this.allSites,
+                src.EndLocation_Name,
+                'Id',
+                'LocationName',
+              ),
+        AdultNum: num(src.AdultNum),
+        Children: num(src.Children),
+        PersonNum: num(src.PersonNum),
+      }
+      this.editDeparture = src.DepartureTime_DateTime || src.DepartureTime || ''
+      // 乘车人：优先详情 Userlist，其次 PersonalIds 字符串（姓名|手机号|身份证）
+      const ul = (d && d.Userlist) || []
+      if (ul.length) {
+        this.editPassengers = ul.map((u) => ({
+          Name: u.Name || '',
+          Phone: u.Code || u.Phone || '',
+          IdCard: u.IDCard || '',
+        }))
+      } else {
+        const ids = src.PersonalIds || ''
+        this.editPassengers = ids
+          ? ids
+              .split(',')
+              .filter(Boolean)
+              .map((s) => {
+                const parts = s.split('|')
+                return {
+                  Name: parts[0] || '',
+                  Phone: parts[1] || '',
+                  IdCard: parts[2] || '',
+                }
+              })
+          : [{ Name: '', Phone: '', IdCard: '' }]
+      }
+    },
+    // 按 Name 从下拉数据里反查 Id/Value，用于详情缺失原始字段时兜底
+    matchId(list, name, idKey, nameKey) {
+      if (!name || !Array.isArray(list)) return null
+      const hit = list.find((item) => item[nameKey] === name)
+      return hit ? hit[idKey] : null
+    },
+    // 全量站点：出发/到达地点下拉共用（同 BusAdmin）
+    async loadAllSites() {
+      try {
+        const res = await request({
+          url: '/BusOrder/GetPageList',
+          method: 'post',
+          data: { pageIndex: 1, pageSize: 500 },
+          noDuplicate: true,
+        })
+        this.allSites = res.data || []
+      } catch (e) {
+        this.allSites = []
+      }
+    },
+    // 按订单出发日期拉取所选线路的班次
+    async loadEditSchedules() {
+      if (this.editForm.LineId == null) return
+      this.scheduleLoading = true
+      try {
+        const data = await request({
+          url: '/BusOrder/GetBusLineScheduleList',
+          method: 'get',
+          params: {
+            lineId: this.editForm.LineId,
+            today:
+              this.formatDay(this.editDeparture) || this.formatDay(Date.now()),
+          },
+        })
+        this.scheduleList = data.data || []
+        // 详情没回填到 ScheduleId 时，按出发时间兜底匹配
+        if (this.editForm.ScheduleId == null && this.editDeparture) {
+          const hit = this.scheduleList.find(
+            (item) =>
+              String(item.DepartureTime || '') === String(this.editDeparture),
+          )
+          if (hit) this.editForm.ScheduleId = hit.Id
+        }
+      } catch (e) {
+        this.scheduleList = []
+      } finally {
+        this.scheduleLoading = false
+      }
+    },
+    // 编辑弹窗换线路：清空班次与已选站点并重新拉取
+    onEditLineChange() {
+      this.editForm.ScheduleId = null
+      this.scheduleList = []
+      // 线路变了，站点集合也变了，清掉已选上下车站
+      this.editForm.StatingLocation = null
+      this.editForm.EndLocation = null
+      this.loadEditSchedules()
+      this.loadEditSites()
+    },
+    // 出发/到达地点下拉：POST /api/BusMobile/GetBusLineSiteTimeInfo（巴士线路站点详情）
+    // 返回 StartSiteList = 出发地点，EndSiteList = 到达地点
+    async loadEditSites() {
+      if (this.editForm.LineId == null) {
+        this.editBoardSites = []
+        this.editAlightSites = []
+        return
+      }
+      this.editSiteLoading = true
+      try {
+        const res = await request({
+          url: '/api/BusMobile/GetBusLineSiteTimeInfo',
+          method: 'post',
+          data: {
+            ScheduleId: this.editForm.ScheduleId,
+            LineId: this.editForm.LineId,
+            DepartureTime:
+              this.editDeparture || this.formatDay(Date.now()) + ' 00:00:00',
+          },
+        })
+        const d = res.data || {}
+        console.log('loadEditSites', d)
+        this.editBoardSites = d.StartSiteList || []
+        this.editAlightSites = d.EndSiteList || []
+      } catch (e) {
+        this.editBoardSites = []
+        this.editAlightSites = []
+      } finally {
+        this.editSiteLoading = false
+      }
+    },
+    // 取 yyyy-MM-dd（用于按日期查询班次），复用 formatDate 的多格式兼容
+    formatDay(val) {
+      if (val === null || val === undefined || val === '') return ''
+      const s = this.formatDate(val)
+      return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : ''
+    },
+    addEditPassenger() {
+      this.editPassengers.push({ Name: '', Phone: '', IdCard: '' })
+    },
+    removeEditPassenger(index) {
+      if (this.editPassengers.length <= 1) return
+      this.editPassengers.splice(index, 1)
+    },
+    // 弹窗关闭后清空编辑状态
+    handleEditClosed() {
+      this.editForm = {
+        Id: '',
+        LineId: null,
+        ScheduleId: null,
+        PassengerPhone: '',
+        TotalAmount: 0,
+        DiscountAmount: 0,
+        PayAmount: 0,
+        TicketPrice: 0,
+        PayStatus: 0,
+        PayType: 1,
+        CancelReason: '',
+        Remark: '',
+        OrderStatus: 0,
+        StatingLocation: null,
+        EndLocation: null,
+        AdultNum: 0,
+        Children: 0,
+        PersonNum: 0,
+      }
+      this.editPassengers = [{ Name: '', Phone: '', IdCard: '' }]
+      this.editDeparture = ''
+      this.scheduleList = []
+      this.editBoardSites = []
+      this.editAlightSites = []
+    },
+    // 保存修改：POST /BusOrder/UpdateBusOrderInfo
+    async submitEdit() {
+      const f = this.editForm
+      if (f.LineId == null) {
+        this.$message.warning('请选择巴士线路')
+        return
+      }
+      if (f.ScheduleId == null) {
+        this.$message.warning('请选择班次')
+        return
+      }
+      if (f.StatingLocation == null || f.EndLocation == null) {
+        this.$message.warning('请选择出发/到达地点')
+        return
+      }
+      if (!/^1\d{10}$/.test(String(f.PassengerPhone || '').trim())) {
+        this.$message.warning('请填写正确的乘客手机号')
+        return
+      }
+      const phoneRe = /^1[3-9]\d{9}$/
+      for (let i = 0; i < this.editPassengers.length; i++) {
+        const p = this.editPassengers[i]
+        if (!String(p.Name || '').trim()) {
+          this.$message.warning(`第 ${i + 1} 位乘车人还没填姓名`)
+          return
+        }
+        if (!phoneRe.test(String(p.Phone || '').trim())) {
+          this.$message.warning(`第 ${i + 1} 位乘车人手机号不正确`)
+          return
+        }
+      }
+      const personalIds = this.editPassengers
+        .map(
+          (p) =>
+            `${String(p.Name).trim()}|${String(p.Phone).trim()}|${String(
+              p.IdCard || '',
+            ).trim()}`,
+        )
+        .join(',')
+      this.editSubmitting = true
+      try {
+        await request({
+          url: '/BusOrder/UpdateBusOrderInfo',
+          method: 'post',
+          data: {
+            LineId: f.LineId,
+            ScheduleId: f.ScheduleId,
+            PassengerPhone: String(f.PassengerPhone).trim(),
+            TotalAmount: Number(f.TotalAmount) || 0,
+            DiscountAmount: Number(f.DiscountAmount) || 0,
+            PayAmount: Number(f.PayAmount) || 0,
+            TicketPrice: Number(f.TicketPrice) || 0,
+            PayStatus: f.PayStatus == null ? 0 : f.PayStatus,
+            PayType: f.PayType == null ? 1 : f.PayType,
+            CancelReason: f.CancelReason || '',
+            Remark: f.Remark || '',
+            OrderStatus: f.OrderStatus == null ? 0 : f.OrderStatus,
+            StatingLocation: f.StatingLocation,
+            EndLocation: f.EndLocation,
+            TicketNum: this.editTicketNum,
+            AdultNum: Number(f.AdultNum) || 0,
+            Children: Number(f.Children) || 0,
+            PersonalIds: personalIds,
+            PersonNum: Number(f.PersonNum) || 0,
+            Id: f.Id,
+          },
+        })
+        this.$message.success('订单修改成功')
+        this.editVisible = false
+        this.getDataList()
+      } catch (e) {
+        // 错误提示由 request 拦截器统一弹出
+      } finally {
+        this.editSubmitting = false
+      }
+    },
+
+    /* ===== 取消订单并退款：/BusOrder/CancelOrder（GET） ===== */
+    handleCancelRefund(row) {
+      if (!row || !row.Id) return
+      this.cancelForm = {
+        Id: row.Id,
+        OrderNo: row.OrderNo || '-',
+        PayAmount: Number(row.PayAmount) || 0,
+        RefundType: false,
+        tag: '',
+      }
+      this.cancelVisible = true
+    },
+    submitCancel() {
+      const f = this.cancelForm
+      if (!f.Id) return
+      if (!String(f.tag || '').trim()) {
+        this.$message.warning('请填写取消原因')
+        return
+      }
+      const pay = Number(f.PayAmount) || 0
+      if (pay <= 0) {
+        this.$message.warning('该订单实付金额为 0，无法退款')
+        return
+      }
+      this.cancelSubmitting = true
+      request({
+        url: '/BusOrder/CancelOrder',
+        method: 'get',
+        params: {
+          Id: f.Id,
+          tag: String(f.tag).trim(),
+          RefundType: f.RefundType,
+        },
+      })
+        .then(() => {
+          this.$message.success('订单已取消，退款处理中')
+          this.cancelVisible = false
+          this.getDataList()
+        })
+        .catch(() => {
+          // 错误提示由 request 拦截器统一弹出
+        })
+        .finally(() => {
+          this.cancelSubmitting = false
+        })
+    },
+
+    /* ===== 特殊退款：/BusOrder/TsRefund（GET） ===== */
+    handleTsRefund(row) {
+      if (!row || !row.Id) return
+      const pay = Number(row.PayAmount) || 0
+      this.tsRefundForm = {
+        Id: row.Id,
+        OrderNo: row.OrderNo || '-',
+        PayAmount: pay,
+        RefundAmount: pay,
+      }
+      this.tsRefundVisible = true
+    },
+    submitTsRefund() {
+      const f = this.tsRefundForm
+      if (!f.Id) return
+      const amount = Number(f.RefundAmount)
+      const pay = Number(f.PayAmount) || 0
+      if (!(amount > 0)) {
+        this.$message.warning('退款金额必须大于 0')
+        return
+      }
+      if (amount > pay) {
+        this.$message.warning('退款金额不能超过实付金额 ¥' + pay.toFixed(2))
+        return
+      }
+      this.tsRefundSubmitting = true
+      request({
+        url: '/BusOrder/TsRefund',
+        method: 'get',
+        params: {
+          Id: f.Id,
+          RefundAmount: amount,
+        },
+      })
+        .then(() => {
+          this.$message.success('特殊退款提交成功')
+          this.tsRefundVisible = false
+          this.getDataList()
+        })
+        .catch(() => {
+          // 错误提示由 request 拦截器统一弹出
+        })
+        .finally(() => {
+          this.tsRefundSubmitting = false
+        })
+    },
   },
 }
 </script>
@@ -693,4 +1608,44 @@ export default {
   color: #909399;
 }
 
+/* —— 修改订单弹窗 —— */
+.edit-body {
+  max-height: 68vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.full {
+  width: 100%;
+}
+.pax-add {
+  margin-left: 10px;
+}
+.pax-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  .pax__name {
+    width: 160px;
+  }
+  .pax__phone {
+    width: 180px;
+  }
+  .pax__idcard {
+    flex: 1;
+  }
+}
+.refund-preview {
+  padding: 8px 10px;
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #613400;
+  .amount {
+    font-weight: 600;
+    color: #f5222d;
+    margin-left: 4px;
+  }
+}
 </style>

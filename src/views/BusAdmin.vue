@@ -249,13 +249,19 @@
             />
             <el-table-column
               prop="JourneyTime"
-              label="行程(分)"
+              label="全程(分钟)"
               width="90"
               align="center"
             />
             <el-table-column
               prop="JourneyPrice"
-              label="票价(元)"
+              label="优惠票价(元)"
+              width="90"
+              align="center"
+            />
+            <el-table-column
+              prop="SitePrice"
+              label="原票价(元)"
               width="90"
               align="center"
             />
@@ -310,21 +316,19 @@
                 class="line-filter"
               >
                 <el-option
-                  v-for="item in allLines"
+                  v-for="item in tplLines"
                   :key="item.Id"
                   :label="item.LineName"
                   :value="item.Id"
                 />
               </el-select>
+              <el-button type="primary" size="mini" @click="openTplDialog()"
+                >新建模板</el-button
+              >
               <el-button size="mini" @click="loadTemplates()">刷新</el-button>
             </div>
           </div>
-          <el-alert
-            type="info"
-            :closable="false"
-            show-icon
-            title="一个模板包含多条线路，每条线路可排多趟班车（每趟班车绑定车辆与司机）。司机管理、时刻表管理的新增/修改接口后端暂未提供，本页先做展示。"
-          />
+
           <el-table
             v-loading="tplLoading"
             :data="pagedTemplates"
@@ -354,7 +358,13 @@
             </el-table-column>
             <el-table-column
               prop="JourneyPrice"
-              label="票价(元)"
+              label="优惠票价(元)"
+              width="90"
+              align="center"
+            />
+            <el-table-column
+              prop="SitePrice"
+              label="原票价(元)"
               width="90"
               align="center"
             />
@@ -377,6 +387,16 @@
                 >
                   {{ scope.row.IsOpen_Name }}
                 </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="80" align="center">
+              <template slot-scope="scope">
+                <el-button
+                  type="text"
+                  size="mini"
+                  @click="openTplDialog(scope.row)"
+                  >编辑</el-button
+                >
               </template>
             </el-table-column>
           </el-table>
@@ -421,10 +441,10 @@
                 class="full"
               >
                 <el-option
-                  v-for="item in allSites"
-                  :key="item.Id"
+                  v-for="item in lineForm.Id ? lineSiteList : allSites"
+                  :key="item.LocationId"
                   :label="item.LocationName"
-                  :value="item.Id"
+                  :value="item.LocationId"
                 />
               </el-select>
             </el-form-item>
@@ -438,60 +458,18 @@
                 class="full"
               >
                 <el-option
-                  v-for="item in allSites"
-                  :key="item.Id"
+                  v-for="item in lineForm.Id ? lineSiteList : allSites"
+                  :key="item.LocationId"
                   :label="item.LocationName"
-                  :value="item.Id"
+                  :value="item.LocationId"
                 />
               </el-select>
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="途经点">
-          <el-select
-            v-model="lineForm.WaypointIds"
-            multiple
-            filterable
-            placeholder="可多选，按选择顺序加入线路"
-            class="full"
-          >
-            <el-option
-              v-for="item in waypointOptions"
-              :key="item.Id"
-              :label="item.LocationName"
-              :value="item.Id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="lineForm.WaypointIds.length" label="途经顺序">
-          <div class="waypoints">
-            <div
-              v-for="(id, index) in lineForm.WaypointIds"
-              :key="id"
-              class="waypoint"
-            >
-              <span class="waypoint__index">{{ index + 1 }}</span>
-              <span class="waypoint__name">{{ siteName(id) }}</span>
-              <el-button
-                type="text"
-                size="mini"
-                :disabled="index === 0"
-                @click="moveWaypoint(index, -1)"
-                >上移</el-button
-              >
-              <el-button
-                type="text"
-                size="mini"
-                :disabled="index === lineForm.WaypointIds.length - 1"
-                @click="moveWaypoint(index, 1)"
-                >下移</el-button
-              >
-            </div>
-          </div>
-        </el-form-item>
         <el-row :gutter="8">
           <el-col :span="8">
-            <el-form-item label="行程(分)">
+            <el-form-item label="全程(分钟)">
               <el-input-number
                 v-model="lineForm.JourneyTime"
                 :min="0"
@@ -501,9 +479,20 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="票价(元)">
+            <el-form-item label="优惠票价(元)">
               <el-input-number
                 v-model="lineForm.JourneyPrice"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="原票价(元)">
+              <el-input-number
+                v-model="lineForm.SitePrice"
                 :min="0"
                 :precision="2"
                 :controls="false"
@@ -526,11 +515,6 @@
         <el-form-item label="所属组织">
           <el-input v-model="lineForm.OrganizationId" />
         </el-form-item>
-        <el-alert
-          type="warning"
-          :closable="false"
-          title="起点/终点会随线路一起保存；途经点顺序目前只在页面内编排，落库需要后端提供线路站点接口（如 /BusOrder/CreateBusLineSite），已存在的站点可在「站点编排」里调整类型和顺序。"
-        />
       </el-form>
       <span slot="footer">
         <el-button size="small" @click="lineDialogVisible = false"
@@ -553,72 +537,64 @@
       width="860px"
       :close-on-click-modal="false"
     >
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        title="出发地站点为上车点、目的地站点为下车点，序号即行驶顺序。可修改已有站点的类型与顺序；新增站点需要后端提供创建接口。"
-      />
-      <el-row :gutter="12" class="site-groups">
-        <el-col :span="12">
-          <div class="group-title">
-            上车点（出发地站点 {{ lineSiteUp.length }}）
-          </div>
-          <el-table
-            :data="lineSiteUp"
-            border
-            size="mini"
-            v-loading="lineSiteLoading"
+      <div class="panel__head">
+        <div class="panel__tools">
+          <el-button type="primary" size="mini" @click="openLineSiteAdd"
+            >新增站点</el-button
           >
-            <el-table-column
-              prop="Sort"
-              label="序号"
-              width="60"
-              align="center"
-            />
-            <el-table-column prop="LocationName" label="站点" min-width="110" />
-            <el-table-column label="操作" width="70" align="center">
-              <template slot-scope="scope">
-                <el-button
-                  type="text"
-                  size="mini"
-                  @click="openLineSiteEdit(scope.row)"
-                  >编辑</el-button
-                >
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-col>
-        <el-col :span="12">
-          <div class="group-title">
-            下车点（目的地站点 {{ lineSiteDown.length }}）
-          </div>
-          <el-table
-            :data="lineSiteDown"
-            border
-            size="mini"
-            v-loading="lineSiteLoading"
-          >
-            <el-table-column
-              prop="Sort"
-              label="序号"
-              width="60"
-              align="center"
-            />
-            <el-table-column prop="LocationName" label="站点" min-width="110" />
-            <el-table-column label="操作" width="70" align="center">
-              <template slot-scope="scope">
-                <el-button
-                  type="text"
-                  size="mini"
-                  @click="openLineSiteEdit(scope.row)"
-                  >编辑</el-button
-                >
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-col>
-      </el-row>
+          <el-button size="mini" @click="loadLineSites">刷新</el-button>
+        </div>
+      </div>
+      <el-table
+        v-loading="lineSiteLoading"
+        :data="lineSiteList"
+        border
+        size="mini"
+        max-height="420"
+        empty-text="还没有设置上车点/下车点，点「新增站点」添加"
+      >
+        <el-table-column prop="Sort" label="序号" width="70" align="center" />
+        <el-table-column prop="LocationName" label="站点" min-width="150" />
+        <el-table-column label="类型" width="110" align="center">
+          <template slot-scope="scope">
+            <el-tag
+              size="mini"
+              :type="scope.row.SType === 1 ? 'success' : 'warning'"
+            >
+              {{ scope.row.SType === 1 ? '出发地' : '目的地' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="ArrivalMinute"
+          label="到达(分)"
+          width="90"
+          align="center"
+        />
+        <el-table-column
+          prop="StayMinute"
+          label="停留(分)"
+          width="90"
+          align="center"
+        />
+        <el-table-column label="操作" width="120" align="center">
+          <template slot-scope="scope">
+            <el-button
+              type="text"
+              size="mini"
+              @click="openLineSiteEdit(scope.row)"
+              >编辑</el-button
+            >
+            <el-button
+              type="text"
+              size="mini"
+              class="danger-text"
+              @click="removeLineSite(scope.row)"
+              >删除</el-button
+            >
+          </template>
+        </el-table-column>
+      </el-table>
       <span slot="footer">
         <el-button size="small" @click="lineSiteVisible = false"
           >关闭</el-button
@@ -626,23 +602,37 @@
       </span>
     </el-dialog>
 
-    <!-- 编辑单个线路站点 -->
+    <!-- 新增 / 编辑单个线路站点 -->
     <el-dialog
-      title="编辑线路站点"
+      :title="lineSiteForm.Id ? '编辑线路站点' : '新增线路站点'"
       :visible.sync="lineSiteEditVisible"
-      width="420px"
+      width="440px"
       append-to-body
       :close-on-click-modal="false"
     >
-      <el-form :model="lineSiteForm" label-width="86px" size="mini">
+      <el-form :model="lineSiteForm" label-width="96px" size="mini">
         <el-form-item label="站点">
-          <el-input :value="lineSiteForm.LocationName" disabled />
+          <el-select
+            v-model="lineSiteForm.LocationId"
+            filterable
+            clearable
+            placeholder="选择站点"
+            class="full"
+            :disabled="!!lineSiteForm.Id"
+          >
+            <el-option
+              v-for="item in allSites"
+              :key="item.Id"
+              :label="item.LocationName"
+              :value="item.Id"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="站点类型">
-          <el-select v-model="lineSiteForm.SType" class="full">
-            <el-option label="出发地站点" :value="1" />
-            <el-option label="目的地站点" :value="2" />
-          </el-select>
+          <el-radio-group v-model="lineSiteForm.SType">
+            <el-radio :label="1">出发地（上车）</el-radio>
+            <el-radio :label="2">目的地（下车）</el-radio>
+          </el-radio-group>
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number
@@ -652,9 +642,17 @@
             class="full"
           />
         </el-form-item>
-        <el-form-item label="到达分钟">
+        <el-form-item label="到达(分钟)">
           <el-input-number
             v-model="lineSiteForm.ArrivalMinute"
+            :min="0"
+            :controls="false"
+            class="full"
+          />
+        </el-form-item>
+        <el-form-item label="停留(分钟)">
+          <el-input-number
+            v-model="lineSiteForm.StayMinute"
             :min="0"
             :controls="false"
             class="full"
@@ -673,6 +671,176 @@
           size="small"
           :loading="lineSiteSaving"
           @click="saveLineSite"
+          >保存</el-button
+        >
+      </span>
+    </el-dialog>
+
+    <!-- 新建 / 编辑班车模板 -->
+    <el-dialog
+      :title="tplForm.Id ? '编辑班车模板 #' + tplForm.Id : '新建班车模板'"
+      :visible.sync="tplDialogVisible"
+      width="620px"
+      :close-on-click-modal="false"
+    >
+      <el-form
+        ref="tplForm"
+        :model="tplForm"
+        :rules="tplRules"
+        label-width="96px"
+        size="mini"
+      >
+        <el-form-item label="所属线路" prop="LineId">
+          <el-select
+            v-model="tplForm.LineId"
+            filterable
+            placeholder="选择线路"
+            class="full"
+            @change="handleTplLineChange"
+          >
+            <el-option
+              v-for="item in tplLines"
+              :key="item.Id"
+              :label="item.LineName"
+              :value="item.Id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-row :gutter="8">
+          <el-col :span="12">
+            <el-form-item label="开始时间" prop="StartTime">
+              <el-time-picker
+                v-model="tplForm.StartTime"
+                format="HH:mm"
+                value-format="HH:mm"
+                placeholder="08:30"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="结束时间" prop="EndTime">
+              <el-time-picker
+                v-model="tplForm.EndTime"
+                format="HH:mm"
+                value-format="HH:mm"
+                placeholder="10:30"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="8">
+          <el-col :span="12">
+            <el-form-item label="司机">
+              <el-select
+                v-model="tplForm.DriverId"
+                filterable
+                allow-create
+                default-first-option
+                clearable
+                placeholder="选择司机，接口未返回时可直接填 ID"
+                class="full"
+              >
+                <el-option
+                  v-for="item in tplDriverOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="车辆 ID">
+              <el-select
+                v-model="tplForm.VehicleId"
+                filterable
+                allow-create
+                default-first-option
+                clearable
+                placeholder="选择车辆，接口未返回时可直接填 ID"
+                class="full"
+              >
+                <el-option
+                  v-for="item in tplCars"
+                  :key="item.Id"
+                  :label="item.VehicleNo"
+                  :value="item.Id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="8">
+          <el-col :span="12">
+            <el-form-item label="票价(元)">
+              <el-input-number
+                v-model="tplForm.JourneyPrice"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="站点价(元)">
+              <el-input-number
+                v-model="tplForm.SitePrice"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="8">
+          <el-col :span="12">
+            <el-form-item label="间隔(分钟)">
+              <el-input-number
+                v-model="tplForm.IntervalTime"
+                :min="0"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="排序">
+              <el-input-number
+                v-model="tplForm.Sort"
+                :min="0"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="是否启用">
+          <el-switch
+            v-model="tplForm.IsOpen"
+            active-text="启用"
+            inactive-text="停用"
+          />
+        </el-form-item>
+        <el-form-item label="所属组织">
+          <el-input v-model="tplForm.OrganizationId" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="tplForm.Remark" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button size="small" @click="tplDialogVisible = false"
+          >取消</el-button
+        >
+        <el-button
+          type="primary"
+          size="small"
+          :loading="tplSaving"
+          @click="saveTpl"
           >保存</el-button
         >
       </span>
@@ -710,8 +878,53 @@ const emptyLine = () => ({
   EndLocation: null,
   JourneyTime: 0,
   JourneyPrice: 0,
+  SitePrice: 0,
   Mileage: 0,
-  WaypointIds: [],
+})
+
+// 兼容后端不同的列表包装：data 直接是数组 / { data: [] } / { List: [] }
+function toList(res) {
+  const d = res && res.data
+  if (Array.isArray(d)) return d
+  if (d && typeof d === 'object') {
+    if (Array.isArray(d.data)) return d.data
+    if (Array.isArray(d.List)) return d.List
+    if (Array.isArray(d.Data)) return d.Data
+  }
+  return []
+}
+
+// 从对象里按候选字段名取第一个有值的
+function pickValue(obj, keys) {
+  for (let i = 0; i < keys.length; i++) {
+    const val = obj ? obj[keys[i]] : undefined
+    if (val !== undefined && val !== null && val !== '') return val
+  }
+  return ''
+}
+
+// 下拉文案：主名称 + 副信息（手机号 / 座位数）
+function buildLabel(obj, { name, extra }) {
+  const main = pickValue(obj, name) || '未命名'
+  const sub = pickValue(obj, extra)
+  return sub ? `${main} / ${sub}` : String(main)
+}
+
+const emptyTpl = () => ({
+  Id: null,
+  LineId: null,
+  DriverId: '',
+  VehicleId: 1,
+  StartTime: '',
+  EndTime: '',
+  JourneyPrice: 0,
+  SitePrice: 0,
+  SitePrice: 0,
+  IntervalTime: 0,
+  IsOpen: true,
+  Remark: '',
+  Sort: 1,
+  OrganizationId: DEFAULT_ORG,
 })
 
 export default {
@@ -769,10 +982,10 @@ export default {
         Id: null,
         LineId: null,
         LocationId: null,
-        LocationName: '',
         SType: 1,
         Sort: 1,
         ArrivalMinute: 0,
+        StayMinute: 0,
         OrganizationId: DEFAULT_ORG,
       },
       // —— 班车模板 ——
@@ -780,22 +993,26 @@ export default {
       tplLoading: false,
       tplLineId: null,
       tplPage: { pageIndex: 1, pageSize: 10 },
+      tplDialogVisible: false,
+      tplSaving: false,
+      tplForm: emptyTpl(),
+      // 模板下拉数据：线路 / 司机 / 车辆（来自后台字典接口）
+      tplLines: [],
+      tplDrivers: [],
+      tplCars: [],
+      tplOptionsLoading: false,
+      tplRules: {
+        LineId: [{ required: true, message: '请选择线路', trigger: 'change' }],
+        StartTime: [
+          { required: true, message: '请选择开始时间', trigger: 'change' },
+        ],
+        EndTime: [
+          { required: true, message: '请选择结束时间', trigger: 'change' },
+        ],
+      },
     }
   },
   computed: {
-    // 途经点候选：排除已选的起点/终点
-    waypointOptions() {
-      const { StatingLocation, EndLocation } = this.lineForm
-      return this.allSites.filter(
-        (item) => item.Id !== StatingLocation && item.Id !== EndLocation,
-      )
-    },
-    lineSiteUp() {
-      return this.lineSiteList.filter((item) => item.SType === 1)
-    },
-    lineSiteDown() {
-      return this.lineSiteList.filter((item) => item.SType === 2)
-    },
     // 后端未严格按 LineId 过滤模板，这里再兜一层
     filteredTemplates() {
       if (!this.tplLineId) return this.tplList
@@ -804,6 +1021,26 @@ export default {
     pagedTemplates() {
       const start = (this.tplPage.pageIndex - 1) * this.tplPage.pageSize
       return this.filteredTemplates.slice(start, start + this.tplPage.pageSize)
+    },
+    // 司机下拉：只取 /BusOrder/GetBusDriverList 的返回，不从模板数据里提取
+    tplDriverOptions() {
+      return this.tplDrivers.map((item) => ({
+        value: pickValue(item, ['Id', 'DriverId', 'UserId']),
+        label: buildLabel(item, {
+          name: ['DriverName', 'Name', 'RealName', 'UserName'],
+          extra: ['Phone', 'DriverPhone', 'Mobile', 'Tel'],
+        }),
+      }))
+    },
+    // 车辆下拉：只取 /BusOrder/GetBusCarList 的返回，不从模板数据里提取
+    tplCarOptions() {
+      return this.tplCars.map((item) => ({
+        value: pickValue(item, ['Id', 'VehicleId', 'CarId']),
+        label: buildLabel(item, {
+          name: ['CarNumber', 'PlateNumber', 'VehicleName', 'CarNo', 'Name'],
+          extra: ['SeatNum', 'SeatCount', 'Seats'],
+        }),
+      }))
     },
   },
   created() {
@@ -821,6 +1058,7 @@ export default {
     this.loadAllSites()
     this.loadLines()
     this.loadTemplates()
+    this.loadTplOptions()
   },
   activated() {
     if (this.activeTab === 'site') this.$nextTick(this.resizeMap)
@@ -1012,6 +1250,7 @@ export default {
           data: { pageIndex: 1, pageSize: 500 },
           noDuplicate: true,
         })
+        console.log('loadAllSites', res)
         this.allSites = res.data || []
       } catch (e) {
         this.allSites = []
@@ -1159,20 +1398,10 @@ export default {
       this.linePage.pageIndex = page
       this.loadLines()
     },
-    siteName(id) {
-      const site = this.allSites.find((item) => item.Id === id)
-      return site ? site.LocationName : id
-    },
-    moveWaypoint(index, offset) {
-      const list = this.lineForm.WaypointIds.slice()
-      const target = index + offset
-      if (target < 0 || target >= list.length) return
-      const tmp = list[index]
-      list[index] = list[target]
-      list[target] = tmp
-      this.lineForm.WaypointIds = list
-    },
     async openLineDialog(row) {
+      console.log('openLineDialog', row)
+      this.currentLine = row
+      await this.loadLineSites()
       if (!this.allLines.length) this.loadAllLines()
       if (!this.allSites.length) this.loadAllSites()
       if (row && row.Id) {
@@ -1192,6 +1421,7 @@ export default {
             EndLocation: detail.EndLocation,
             JourneyTime: detail.JourneyTime || 0,
             JourneyPrice: detail.JourneyPrice || 0,
+            SitePrice: detail.SitePrice || 0,
             Mileage: detail.Mileage || 0,
           })
         } catch (e) {
@@ -1218,6 +1448,7 @@ export default {
           JourneyTime: this.lineForm.JourneyTime || 0,
           JourneyPrice: this.lineForm.JourneyPrice || 0,
           Mileage: this.lineForm.Mileage || 0,
+          SitePrice: this.lineForm.SitePrice || 0, // 后端接口要求传 SitePrice，暂时写死为 0
         }
         try {
           if (this.lineForm.Id) {
@@ -1233,7 +1464,11 @@ export default {
               data: payload,
             })
           }
-          Message.success('保存成功')
+          Message.success(
+            this.lineForm.Id
+              ? '保存成功'
+              : '线路创建成功，请在该线路的「站点编排」里添加上车点/下车点',
+          )
           this.lineDialogVisible = false
           this.loadLines()
           this.loadAllLines()
@@ -1247,11 +1482,14 @@ export default {
 
     // ==================== 线路站点 ====================
     async openLineSites(line) {
+      console.log('openLineSites', line)
       this.currentLine = line
       this.lineSiteVisible = true
+      if (!this.allSites.length) this.loadAllSites()
       await this.loadLineSites()
     },
     async loadLineSites() {
+      console.log('1', this.currentLine)
       if (!this.currentLine) return
       this.lineSiteLoading = true
       try {
@@ -1259,51 +1497,82 @@ export default {
           url: '/BusOrder/GetBusLineSitePageList',
           method: 'post',
           data: {
-            // LineId: this.currentLine.Id,
+            LineId: this.currentLine.Id,
             pageIndex: 1,
             pageSize: 200,
           },
         })
         const list = res.data || []
-        // 按序号排，序号相同按 Id 排，保证上下车两列顺序稳定
+        // 按序号排，序号相同按 Id 排，保证顺序稳定
         this.lineSiteList = list.sort(
           (a, b) => (a.Sort || 0) - (b.Sort || 0) || a.Id - b.Id,
         )
+        console.log('有条件的站点', this.currentLine.Id, this.currentLine)
       } catch (e) {
         this.lineSiteList = []
       } finally {
         this.lineSiteLoading = false
       }
     },
+    // 新增：序号默认排到最后
+    openLineSiteAdd() {
+      this.lineSiteForm = {
+        Id: null,
+        LineId: this.currentLine ? this.currentLine.Id : null,
+        LocationId: null,
+        SType: 1,
+        Sort: this.lineSiteList.length + 1,
+        ArrivalMinute: 0,
+        StayMinute: 0,
+        OrganizationId:
+          (this.currentLine && this.currentLine.OrganizationId) || DEFAULT_ORG,
+      }
+      this.lineSiteEditVisible = true
+    },
     openLineSiteEdit(row) {
       this.lineSiteForm = {
         Id: row.Id,
         LineId: row.LineId,
         LocationId: row.LocationId,
-        LocationName: row.LocationName,
         SType: row.SType,
         Sort: row.Sort,
         ArrivalMinute: row.ArrivalMinute || 0,
+        StayMinute: row.StayMinute || 0,
         OrganizationId: row.OrganizationId || DEFAULT_ORG,
       }
       this.lineSiteEditVisible = true
     },
     async saveLineSite() {
+      const form = this.lineSiteForm
+      if (!form.LocationId) {
+        Message.warning('请选择站点')
+        return
+      }
       this.lineSiteSaving = true
+      const payload = {
+        OrganizationId: form.OrganizationId,
+        LocationId: form.LocationId,
+        Sort: form.Sort,
+        LineId: form.LineId,
+        SType: form.SType,
+        ArrivalMinute: form.ArrivalMinute || 0,
+        StayMinute: form.StayMinute || 0,
+      }
       try {
-        await request({
-          url: '/BusOrder/UpdateBusLineSite',
-          method: 'post',
-          data: {
-            Id: this.lineSiteForm.Id,
-            LineId: this.lineSiteForm.LineId,
-            LocationId: this.lineSiteForm.LocationId,
-            Sort: this.lineSiteForm.Sort,
-            SType: this.lineSiteForm.SType,
-            OrganizationId: this.lineSiteForm.OrganizationId,
-            ArrivalMinute: this.lineSiteForm.ArrivalMinute,
-          },
-        })
+        if (form.Id) {
+          await request({
+            url: '/BusOrder/UpdateBusLineSite',
+            method: 'post',
+            data: Object.assign(payload, { Id: form.Id }),
+          })
+        } else {
+          // 新增走批量接口，单条也按数组提交
+          await request({
+            url: '/BusOrder/CreateBusLineSiteList',
+            method: 'post',
+            data: [payload],
+          })
+        }
         Message.success('保存成功')
         this.lineSiteEditVisible = false
         this.loadLineSites()
@@ -1313,10 +1582,39 @@ export default {
         this.lineSiteSaving = false
       }
     },
+    // 删除线路站点
+    async removeLineSite(row) {
+      try {
+        await this.$confirm(
+          `确定把「${row.LocationName}」从该线路上移除吗？`,
+          '提示',
+          {
+            type: 'warning',
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+          },
+        )
+      } catch (e) {
+        return // 取消
+      }
+      try {
+        await request({
+          url: '/BusOrder/DeleteBusLineSite',
+          method: 'post',
+          data: { Id: row.Id },
+        })
+        Message.success('删除成功')
+        this.loadLineSites()
+      } catch (e) {
+        // 接口未上线时（404）拦截器已提示，这里补一句上下文
+        Message.warning(
+          '删除失败，请确认后端已提供 /BusOrder/DeleteBusLineSite',
+        )
+      }
+    },
 
     // ==================== 班车模板 ====================
     async loadTemplates() {
-      if (!this.allLines.length) this.loadAllLines()
       this.tplLoading = true
       try {
         const data = { pageIndex: 1, pageSize: 200 }
@@ -1340,6 +1638,135 @@ export default {
     },
     handleTplPageChange(page) {
       this.tplPage.pageIndex = page
+    },
+    // 模板下拉数据：线路 / 司机 / 车辆，全部直接取后台接口返回
+    // （司机、车辆接口未上线时静默失败，下拉为空；输入框仍支持手填 ID）
+    async loadTplOptions() {
+      if (this.tplOptionsLoading) return
+      this.tplOptionsLoading = true
+      try {
+        const [lineRes, driverRes, carRes] = await Promise.all([
+          request({
+            url: '/BusOrder/GetBusLineList',
+            method: 'get',
+            silent: true,
+          }).catch(() => null),
+          request({
+            url: '/BusOrder/GetBusDriverList',
+            method: 'post',
+            data: {},
+            silent: true,
+          }).catch(() => null),
+          request({
+            url: '/BusOrder/GetBusCarList',
+            method: 'post',
+            data: {},
+            silent: true,
+          }).catch(() => null),
+        ])
+        this.tplLines = toList(lineRes)
+        this.tplDrivers = toList(driverRes)
+        this.tplCars = toList(carRes)
+      } finally {
+        this.tplOptionsLoading = false
+      }
+    },
+    // 新建 / 编辑模板：编辑时先拉详情
+    async openTplDialog(row) {
+      this.loadTplOptions()
+      if (!this.tplList.length) this.loadTemplates()
+      if (row && row.Id) {
+        try {
+          const res = await request({
+            url: '/BusOrder/GetBusDepartureTemplateInfo',
+            method: 'get',
+            params: { Id: row.Id },
+          })
+          const detail = res.data || {}
+          this.tplForm = Object.assign(emptyTpl(), {
+            Id: detail.Id,
+            LineId: detail.LineId,
+            DriverId: detail.DriverId || '',
+            VehicleId: detail.VehicleId || 1,
+            StartTime: (detail.StartTime || '').slice(0, 5),
+            EndTime: (detail.EndTime || '').slice(0, 5),
+            JourneyPrice: detail.JourneyPrice || 0,
+            SitePrice: detail.SitePrice || 0,
+            IntervalTime: detail.IntervalTime || 0,
+            IsOpen: detail.IsOpen !== false,
+            Remark: detail.Remark || '',
+            Sort: detail.Sort || 0,
+            OrganizationId: detail.OrganizationId || DEFAULT_ORG,
+          })
+        } catch (e) {
+          return
+        }
+      } else {
+        this.tplForm = emptyTpl()
+        this.tplForm.Sort = this.tplList.length + 1
+      }
+      this.tplDialogVisible = true
+      this.$nextTick(() => {
+        if (this.$refs.tplForm) this.$refs.tplForm.clearValidate()
+      })
+    },
+    // 选线路时带出该线路所属组织（线路只取 GetBusLineList 的返回）
+    handleTplLineChange(lineId) {
+      const line = this.tplLines.find((item) => item.Id === lineId)
+      if (line && line.OrganizationId) {
+        this.tplForm.OrganizationId = line.OrganizationId
+      }
+    },
+    saveTpl() {
+      this.$refs.tplForm.validate(async (valid) => {
+        if (!valid) return
+        if (
+          this.tplForm.StartTime &&
+          this.tplForm.EndTime &&
+          this.tplForm.EndTime <= this.tplForm.StartTime
+        ) {
+          Message.warning('结束时间需要晚于开始时间')
+          return
+        }
+        this.tplSaving = true
+        const payload = {
+          LineId: this.tplForm.LineId,
+          DriverId: this.tplForm.DriverId,
+          // 车辆下拉是 allow-create 的，手输时是字符串，这里统一转数字
+          VehicleId: Number(this.tplForm.VehicleId) || 0,
+          StartTime: this.tplForm.StartTime,
+          EndTime: this.tplForm.EndTime,
+          JourneyPrice: this.tplForm.JourneyPrice || 0,
+          SitePrice: this.tplForm.SitePrice || 0,
+          IntervalTime: this.tplForm.IntervalTime || 0,
+          IsOpen: this.tplForm.IsOpen,
+          Remark: this.tplForm.Remark || null,
+          Sort: this.tplForm.Sort || 0,
+          OrganizationId: this.tplForm.OrganizationId,
+        }
+        try {
+          if (this.tplForm.Id) {
+            await request({
+              url: '/BusOrder/UpdateBusLineTemplate',
+              method: 'post',
+              data: Object.assign(payload, { Id: this.tplForm.Id }),
+            })
+          } else {
+            await request({
+              url: '/BusOrder/CreateBusLineTemplate',
+              method: 'post',
+              data: payload,
+            })
+          }
+          Message.success('保存成功')
+          this.tplDialogVisible = false
+          this.loadTemplates()
+        } catch (e) {
+          // 拦截器已提示
+        } finally {
+          this.tplSaving = false
+        }
+      })
     },
   },
 }
@@ -1492,44 +1919,8 @@ export default {
     margin-bottom: 0;
   }
 
-  .site-groups {
-    margin-top: 4px;
-  }
-
-  .group-title {
-    margin-bottom: 8px;
-    padding-left: 8px;
-    border-left: 3px solid $primary;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 14px;
-    color: $header-bg;
-  }
-
-  .waypoints {
-    width: 100%;
-  }
-  .waypoint {
-    display: flex;
-    align-items: center;
-    padding: 2px 0;
-
-    &__index {
-      width: 20px;
-      height: 20px;
-      margin-right: 8px;
-      border-radius: 50%;
-      background: lighten($primary, 38%);
-      color: darken($primary, 10%);
-      font-size: 12px;
-      line-height: 20px;
-      text-align: center;
-    }
-    &__name {
-      flex: 1;
-      font-size: 13px;
-      color: #606266;
-    }
+  ::v-deep .danger-text {
+    color: $danger;
   }
 
   .sub {

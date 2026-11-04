@@ -177,7 +177,7 @@ service.interceptors.response.use(
       // 后端（qice）错误提示字段为 msg，兼容 message
       const bizMsg = res.msg || res.message || '请求失败';
       const rejectBiz = () => {
-        Message.error(bizMsg);
+        if (!config.silent) Message.error(bizMsg);
         return Promise.reject(new Error(bizMsg));
       };
 
@@ -228,7 +228,7 @@ service.interceptors.response.use(
       msg = '请求超时，请检查网络';
     }
     log('✗', msg, (config.baseURL || '') + (config.url || ''));
-    Message.error(msg);
+    if (!config.silent) Message.error(msg);
     return Promise.reject(error);
   }
 );
