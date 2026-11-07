@@ -109,6 +109,41 @@ const definitions = [
     auth: true,
     status: 'todo',
     sample: {}
+  },
+
+  // ———— 巴士运营时刻（/bus-operations 页面使用） ————
+  {
+    id: 'busOps.getOperationsList',
+    module: '巴士运营',
+    name: '获取巴士运营时刻',
+    method: 'GET',
+    path: '/BusOrder/GetBusLineOperationsList',
+    desc: '按路线 + 日期查询当天运营班次列表',
+    auth: true,
+    status: 'ready',
+    sample: { params: { lineId: 1, today: '2026-11-06' } }
+  },
+  {
+    id: 'busOps.updateLineOpenState',
+    module: '巴士运营',
+    name: '修改运营开关',
+    method: 'GET',
+    path: '/BusOrder/UpdateLineOpenState',
+    desc: '切换班次售卖开关（IsSale）',
+    auth: true,
+    status: 'ready',
+    sample: { params: { Id: 1, IsSale: true } }
+  },
+  {
+    id: 'busOps.getDailyScheduleInfo',
+    module: '巴士运营',
+    name: '获取运营详情',
+    method: 'GET',
+    path: '/BusOrder/GetDailyScheduleInfo',
+    desc: '按班次 Id 查询当日运营详情',
+    auth: true,
+    status: 'ready',
+    sample: { params: { Id: 1 } }
   }
 ];
 

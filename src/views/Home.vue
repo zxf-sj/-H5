@@ -3,7 +3,7 @@
     <div class="card">
       <div class="card-head">
         <span class="card-head__title">巴士订单</span>
-        <!-- <div>
+        <div>
           <el-button
             type="primary"
             size="mini"
@@ -18,7 +18,14 @@
             @click="$router.push('/bus-admin')"
             >巴士管理</el-button
           >
-        </div> -->
+          <el-button
+            type="primary"
+            size="mini"
+            plain
+            @click="$router.push('/bus-operations')"
+            >运营时刻</el-button
+          >
+        </div>
       </div>
       <el-form :inline="true" size="small">
         <el-form-item label="筛选时间段" size="mini">
@@ -44,7 +51,7 @@
             </el-option>
           </el-select>
         </el-form-item>
-        <el-form-item label="巴士线路" size="mini">
+        <el-form-item label="巴士路线" size="mini">
           <el-select v-model="form.LineId" placeholder="请选择">
             <el-option
               v-for="item in busLineList"
@@ -89,7 +96,7 @@
           align="center"
         />
         <el-table-column prop="Vehicle_Name" label="车牌号" align="center" />
-        <el-table-column prop="AdultNum" label="乘客人数" align="center" />
+        <el-table-column prop="AdultNum" label="实到人数" align="center" />
         <el-table-column
           prop="OrderSource_Name"
           label="订单来源"
@@ -137,12 +144,14 @@
             >
             <el-button
               @click="handleCancelRefund(scope.row)"
+              v-if="scope.row.PayStatus === 1"
               type="text"
               size="small"
               >取消退款</el-button
             >
             <el-button
               @click="handleTsRefund(scope.row)"
+              v-if="scope.row.PayStatus === 1"
               type="text"
               size="small"
               >特殊退款</el-button
@@ -212,7 +221,7 @@
               <el-descriptions-item label="乘客手机号">{{
                 detail.PassengerPhone || '-'
               }}</el-descriptions-item>
-              <el-descriptions-item label="乘客人数"
+              <el-descriptions-item label="实到人数"
                 >{{ detail.AdultNum || 0 }} 人</el-descriptions-item
               >
               <el-descriptions-item label="出发时间">{{
@@ -228,7 +237,7 @@
           <div class="detail-section">
             <div class="detail-section__title">行程信息</div>
             <el-descriptions :column="3" border size="mini">
-              <el-descriptions-item label="巴士线路">{{
+              <el-descriptions-item label="巴士路线">{{
                 detail.Line_Name || '-'
               }}</el-descriptions-item>
               <el-descriptions-item label="车牌号">{{
@@ -364,12 +373,13 @@
             <div class="detail-section__title">基本信息</div>
             <el-row :gutter="8">
               <el-col :span="8">
-                <el-form-item label="巴士线路">
+                <el-form-item label="巴士路线">
                   <el-select
                     v-model="editForm.LineId"
                     filterable
-                    placeholder="选择线路"
+                    placeholder="选择路线"
                     class="full"
+                    disabled
                     @change="onEditLineChange"
                   >
                     <el-option
@@ -381,14 +391,27 @@
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :span="16">
+              <el-col :span="8">
+                <el-form-item label="日期">
+                  <el-radio-group
+                    v-model="editDateType"
+                    size="mini"
+                    @change="onEditDateTypeChange"
+                  >
+                    <el-radio-button label="today">今天</el-radio-button>
+                    <el-radio-button label="tomorrow">明天</el-radio-button>
+                  </el-radio-group>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
                 <el-form-item label="班次">
                   <el-select
                     v-model="editForm.ScheduleId"
                     filterable
-                    placeholder="选择班次"
+                    :placeholder="'选择班次（' + editDate + '）'"
                     class="full"
                     :loading="scheduleLoading"
+                    @change="onEditScheduleChange"
                   >
                     <el-option
                       v-for="item in scheduleList"
@@ -396,7 +419,10 @@
                       :label="
                         (item.DepartureTime || '') +
                         ' ' +
-                        (item.StatingLocation_Name || '')
+                        (item.StatingLocation_Name || '') +
+                        (item.EmptySeat > 0
+                          ? '（余' + item.EmptySeat + '座）'
+                          : '（无余票）')
                       "
                       :value="item.Id"
                     />
@@ -412,13 +438,14 @@
                     filterable
                     placeholder="选择站点"
                     class="full"
+                    disabled
                     :loading="editSiteLoading"
                   >
                     <el-option
                       v-for="item in editBoardSites"
-                      :key="item.Id"
+                      :key="item.LocationId"
                       :label="item.LocationName"
-                      :value="item.Id"
+                      :value="item.LocationId"
                     />
                   </el-select>
                 </el-form-item>
@@ -430,13 +457,14 @@
                     filterable
                     placeholder="选择站点"
                     class="full"
+                    disabled
                     :loading="editSiteLoading"
                   >
                     <el-option
                       v-for="item in editAlightSites"
-                      :key="item.Id"
+                      :key="item.LocationId"
                       :label="item.LocationName"
-                      :value="item.Id"
+                      :value="item.LocationId"
                     />
                   </el-select>
                 </el-form-item>
@@ -447,6 +475,7 @@
                     v-model="editForm.PassengerPhone"
                     maxlength="11"
                     placeholder="乘客手机号"
+                    disabled
                   />
                 </el-form-item>
               </el-col>
@@ -458,6 +487,7 @@
                     v-model="editForm.OrderStatus"
                     placeholder="请选择"
                     class="full"
+                    disabled
                   >
                     <el-option
                       v-for="item in busOrderStateList"
@@ -474,6 +504,7 @@
                     v-model="editForm.PayStatus"
                     placeholder="请选择"
                     class="full"
+                    disabled
                   >
                     <el-option
                       v-for="item in busPayStatusList"
@@ -490,6 +521,7 @@
                     v-model="editForm.PayType"
                     placeholder="请选择"
                     class="full"
+                    disabled
                   >
                     <el-option
                       v-for="item in payTypeOptions"
@@ -514,6 +546,7 @@
                     :precision="2"
                     :controls="false"
                     class="full"
+                    disabled
                   />
                 </el-form-item>
               </el-col>
@@ -525,6 +558,7 @@
                     :precision="2"
                     :controls="false"
                     class="full"
+                    disabled
                   />
                 </el-form-item>
               </el-col>
@@ -536,6 +570,7 @@
                     :precision="2"
                     :controls="false"
                     class="full"
+                    disabled
                   />
                 </el-form-item>
               </el-col>
@@ -547,6 +582,7 @@
                     :precision="2"
                     :controls="false"
                     class="full"
+                    disabled
                   />
                 </el-form-item>
               </el-col>
@@ -559,6 +595,7 @@
                     :min="0"
                     :controls="false"
                     class="full"
+                    disabled
                   />
                 </el-form-item>
               </el-col>
@@ -569,11 +606,12 @@
                     :min="0"
                     :controls="false"
                     class="full"
+                    disabled
                   />
                 </el-form-item>
               </el-col>
               <el-col :span="8">
-                <el-form-item label="乘客人数">
+                <el-form-item label="实到人数">
                   <el-input :value="editTicketNum" disabled />
                 </el-form-item>
               </el-col>
@@ -587,6 +625,7 @@
                 type="text"
                 size="mini"
                 class="pax-add"
+                disabled
                 @click="addEditPassenger"
                 >+ 添加乘车人</el-button
               >
@@ -601,6 +640,7 @@
                 size="mini"
                 placeholder="姓名"
                 class="pax__name"
+                disabled
               />
               <el-input
                 v-model="item.Phone"
@@ -608,17 +648,20 @@
                 maxlength="11"
                 placeholder="手机号"
                 class="pax__phone"
+                disabled
               />
               <el-input
                 v-model="item.IdCard"
                 size="mini"
                 placeholder="身份证号"
                 class="pax__idcard"
+                disabled
               />
               <el-button
                 v-if="editPassengers.length > 1"
                 type="text"
                 size="mini"
+                disabled
                 @click="removeEditPassenger(index)"
                 >删除</el-button
               >
@@ -629,18 +672,11 @@
             <div class="detail-section__title">其他</div>
             <el-row :gutter="8">
               <el-col :span="12">
-                <el-form-item label="取消原因">
-                  <el-input
-                    v-model="editForm.CancelReason"
-                    placeholder="取消原因（选填）"
-                  />
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
                 <el-form-item label="备注">
                   <el-input
                     v-model="editForm.Remark"
                     placeholder="备注（选填）"
+                    disabled
                   />
                 </el-form-item>
               </el-col>
@@ -776,7 +812,7 @@ export default {
       tableData: [],
       loading: false,
       busOrderStateList: [], //订单状态
-      busLineList: [], //巴士线路
+      busLineList: [], //巴士路线
       busPayStatusList: [], //付款状态
       listParams: {
         OrderNo: null,
@@ -816,11 +852,13 @@ export default {
         PersonNum: 0,
       },
       editPassengers: [{ Name: '', Phone: '', IdCard: '' }],
-      editDeparture: '', // 订单原出发时间，用于按日期拉班次
+      editDeparture: '', // 订单原出发时间，兜底匹配班次用
+      editOrderPast: false, // 订单出发日期是否早于今天（过去了就不回显原班次/站点）
+      editDateType: 'today', // 班次/站点查询日期：today=今天（默认） tomorrow=明天
       scheduleList: [], // 班次下拉
       scheduleLoading: false,
       allSites: [], // 全量站点，编辑回填反查用
-      editBoardSites: [], // 修改订单：出发地点下拉（GetBusLineSiteInfo 按线路返回）
+      editBoardSites: [], // 修改订单：出发地点下拉（GetBusLineSiteInfo 按路线返回）
       editAlightSites: [], // 修改订单：到达地点下拉
       editSiteLoading: false,
       payTypeOptions: [
@@ -857,11 +895,28 @@ export default {
     logList() {
       return (this.detail && this.detail.loglist) || []
     },
-    // 编辑表单：乘客人数 = 成人数 + 儿童数
+    // 编辑表单：实到人数 = 成人数 + 儿童数
     editTicketNum() {
       return (
         (Number(this.editForm.AdultNum) || 0) +
         (Number(this.editForm.Children) || 0)
+      )
+    },
+    // 班次/站点查询日期：默认今天，选「明天」按钮则 +1 天
+    editDate() {
+      const base = this.formatDay(new Date())
+      if (this.editDateType !== 'tomorrow') return base
+      const d = new Date(String(base).replace(/-/g, '/'))
+      if (isNaN(d.getTime())) return base
+      d.setDate(d.getDate() + 1)
+      return this.formatDay(d)
+    },
+    // 当前选中的班次对象（取站点接口用的出发时间）
+    editSchedule() {
+      return (
+        this.scheduleList.find(
+          (item) => item.Id === this.editForm.ScheduleId,
+        ) || null
       )
     },
     // 取消退款预计金额：RefundType=false 扣30%=退70%；true 全退
@@ -985,7 +1040,7 @@ export default {
         this.loading = false
       }
     },
-    //获取巴士线路
+    //获取巴士路线
     async getBusLineList() {
       this.loading = true
       this.err = ''
@@ -1091,7 +1146,7 @@ export default {
       this.editLoading = false
       if (this.editForm.LineId != null) {
         this.loadEditSchedules()
-        // 出发/到达地点下拉：按订单线路拉站点详情
+        // 出发/到达地点下拉：按订单路线拉站点详情
         this.loadEditSites()
       }
     },
@@ -1157,6 +1212,16 @@ export default {
         PersonNum: num(src.PersonNum),
       }
       this.editDeparture = src.DepartureTime_DateTime || src.DepartureTime || ''
+      // 班次/站点默认请求今天的
+      this.editDateType = 'today'
+      // 订单出发日期早于今天：不回显原班次与上下车站，只请求今天的班次
+      const orderDay = this.formatDay(this.editDeparture)
+      this.editOrderPast = !!orderDay && orderDay < this.formatDay(new Date())
+      if (this.editOrderPast) {
+        this.editForm.ScheduleId = null
+        this.editForm.StatingLocation = null
+        this.editForm.EndLocation = null
+      }
       // 乘车人：优先详情 Userlist，其次 PersonalIds 字符串（姓名|手机号|身份证）
       const ul = (d && d.Userlist) || []
       if (ul.length) {
@@ -1202,7 +1267,7 @@ export default {
         this.allSites = []
       }
     },
-    // 按订单出发日期拉取所选线路的班次
+    // 按日期（今天默认 / 明天）拉取所选路线的班次
     async loadEditSchedules() {
       if (this.editForm.LineId == null) return
       this.scheduleLoading = true
@@ -1212,18 +1277,26 @@ export default {
           method: 'get',
           params: {
             lineId: this.editForm.LineId,
-            today:
-              this.formatDay(this.editDeparture) || this.formatDay(Date.now()),
+            today: this.editDate,
           },
         })
         this.scheduleList = data.data || []
-        // 详情没回填到 ScheduleId 时，按出发时间兜底匹配
-        if (this.editForm.ScheduleId == null && this.editDeparture) {
+        // 「今天」且详情没回填到 ScheduleId 时，按出发时间兜底匹配（过去的订单不匹配）
+        if (
+          this.editDateType === 'today' &&
+          !this.editOrderPast &&
+          this.editForm.ScheduleId == null &&
+          this.editDeparture
+        ) {
           const hit = this.scheduleList.find(
             (item) =>
               String(item.DepartureTime || '') === String(this.editDeparture),
           )
-          if (hit) this.editForm.ScheduleId = hit.Id
+          if (hit) {
+            this.editForm.ScheduleId = hit.Id
+            // 兜底匹配到班次后，用班次 Id 拉出发地/目的地
+            this.loadEditSites()
+          }
         }
       } catch (e) {
         this.scheduleList = []
@@ -1231,20 +1304,36 @@ export default {
         this.scheduleLoading = false
       }
     },
-    // 编辑弹窗换线路：清空班次与已选站点并重新拉取
+    // 切换今天/明天：清空已选班次与出发地/目的地，只请求所选日期的班次
+    onEditDateTypeChange() {
+      this.editForm.ScheduleId = null
+      this.editForm.StatingLocation = null
+      this.editForm.EndLocation = null
+      this.editBoardSites = []
+      this.editAlightSites = []
+      this.loadEditSchedules()
+    },
+    // 选中班次后：拿班次 Id 请求该班次当天的出发地/目的地列表
+    onEditScheduleChange() {
+      this.editForm.StatingLocation = null
+      this.editForm.EndLocation = null
+      this.loadEditSites()
+    },
+    // 编辑弹窗换路线：清空班次与已选站点并重新拉取
     onEditLineChange() {
       this.editForm.ScheduleId = null
       this.scheduleList = []
-      // 线路变了，站点集合也变了，清掉已选上下车站
+      // 路线变了，站点集合也变了，清掉已选上下车站
       this.editForm.StatingLocation = null
       this.editForm.EndLocation = null
+      this.editBoardSites = []
+      this.editAlightSites = []
       this.loadEditSchedules()
-      this.loadEditSites()
     },
-    // 出发/到达地点下拉：POST /api/BusMobile/GetBusLineSiteTimeInfo（巴士线路站点详情）
-    // 返回 StartSiteList = 出发地点，EndSiteList = 到达地点
+    // 出发/到达地点下拉：POST /api/BusMobile/GetBusLineSiteTimeInfo（巴士路线站点详情）
+    // 返回 StartSiteList = 出发地点，EndSiteList = 到达地点；按所选班次 Id 请求
     async loadEditSites() {
-      if (this.editForm.LineId == null) {
+      if (this.editForm.LineId == null || this.editForm.ScheduleId == null) {
         this.editBoardSites = []
         this.editAlightSites = []
         return
@@ -1258,7 +1347,8 @@ export default {
             ScheduleId: this.editForm.ScheduleId,
             LineId: this.editForm.LineId,
             DepartureTime:
-              this.editDeparture || this.formatDay(Date.now()) + ' 00:00:00',
+              (this.editSchedule && this.editSchedule.DepartureTime) ||
+              this.editDate + ' 00:00:00',
           },
         })
         const d = res.data || {}
@@ -1309,6 +1399,8 @@ export default {
       }
       this.editPassengers = [{ Name: '', Phone: '', IdCard: '' }]
       this.editDeparture = ''
+      this.editOrderPast = false
+      this.editDateType = 'today'
       this.scheduleList = []
       this.editBoardSites = []
       this.editAlightSites = []
@@ -1317,7 +1409,7 @@ export default {
     async submitEdit() {
       const f = this.editForm
       if (f.LineId == null) {
-        this.$message.warning('请选择巴士线路')
+        this.$message.warning('请选择巴士路线')
         return
       }
       if (f.ScheduleId == null) {
@@ -1616,6 +1708,11 @@ export default {
 }
 .full {
   width: 100%;
+}
+.edit-day-tip {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #909399;
 }
 .pax-add {
   margin-left: 10px;

@@ -117,10 +117,25 @@
                 <el-form-item label="区县">
                   <el-input v-model="siteForm.County" placeholder="区 / 县" />
                 </el-form-item>
+                <el-form-item label="适用行程">
+                  <el-select
+                    v-model="siteForm.ReturnTrip"
+                    placeholder="选择适用行程"
+                    class="full"
+                  >
+                    <el-option
+                      v-for="item in returnTripOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                </el-form-item>
                 <el-form-item label="所属组织">
                   <el-input
                     v-model="siteForm.OrganizationId"
                     placeholder="OrganizationId"
+                    disabled
                   />
                 </el-form-item>
                 <el-form-item label="状态">
@@ -169,6 +184,11 @@
               min-width="220"
               show-overflow-tooltip
             />
+            <el-table-column label="适用行程" width="90" align="center">
+              <template slot-scope="scope">
+                {{ returnTripLabel(scope.row.ReturnTrip) }}
+              </template>
+            </el-table-column>
             <el-table-column
               prop="Status_Name"
               label="状态"
@@ -190,7 +210,7 @@
               width="150"
               align="center"
             />
-            <el-table-column label="操作" width="130" align="center">
+            <el-table-column label="操作" width="180" align="center">
               <template slot-scope="scope">
                 <el-button type="text" size="mini" @click="editSite(scope.row)"
                   >编辑</el-button
@@ -200,6 +220,13 @@
                   size="mini"
                   @click="locateSite(scope.row)"
                   >地图定位</el-button
+                >
+                <el-button
+                  type="text"
+                  size="mini"
+                  class="danger-text"
+                  @click="removeSite(scope.row)"
+                  >删除</el-button
                 >
               </template>
             </el-table-column>
@@ -217,14 +244,14 @@
         </div>
       </el-tab-pane>
 
-      <!-- ==================== 线路管理 ==================== -->
-      <el-tab-pane label="线路管理" name="line">
+      <!-- ==================== 路线管理 ==================== -->
+      <el-tab-pane label="路线管理" name="line">
         <div class="panel">
           <div class="panel__head">
-            <span class="panel__title">巴士线路（共 {{ lineTotal }} 条）</span>
+            <span class="panel__title">巴士路线（共 {{ lineTotal }} 条）</span>
             <div class="panel__tools">
               <el-button type="primary" size="mini" @click="openLineDialog()"
-                >新建线路</el-button
+                >新建路线</el-button
               >
               <el-button size="mini" @click="loadLines()">刷新</el-button>
             </div>
@@ -236,7 +263,7 @@
             size="mini"
             style="width: 100%"
           >
-            <el-table-column prop="LineName" label="线路名称" min-width="130" />
+            <el-table-column prop="LineName" label="路线名称" min-width="130" />
             <el-table-column
               prop="StatingLocation_Name"
               label="起点站"
@@ -261,7 +288,7 @@
             />
             <el-table-column
               prop="SitePrice"
-              label="原票价(元)"
+              label="基准票价(元)"
               width="90"
               align="center"
             />
@@ -271,7 +298,7 @@
               width="90"
               align="center"
             />
-            <el-table-column label="操作" width="160" align="center">
+            <el-table-column label="操作" width="200" align="center">
               <template slot-scope="scope">
                 <el-button
                   type="text"
@@ -284,6 +311,13 @@
                   size="mini"
                   @click="openLineDialog(scope.row)"
                   >编辑</el-button
+                >
+                <el-button
+                  type="text"
+                  size="mini"
+                  class="danger-text"
+                  @click="removeLine(scope.row)"
+                  >删除</el-button
                 >
               </template>
             </el-table-column>
@@ -305,14 +339,14 @@
       <el-tab-pane label="班车模板" name="tpl">
         <div class="panel">
           <div class="panel__head">
-            <span class="panel__title">运营线路时刻模板</span>
+            <span class="panel__title">运营路线时刻模板</span>
             <div class="panel__tools">
               <el-select
                 v-model="tplLineId"
                 size="mini"
                 clearable
                 filterable
-                placeholder="全部线路"
+                placeholder="全部路线"
                 class="line-filter"
               >
                 <el-option
@@ -336,7 +370,7 @@
             size="mini"
             style="width: 100%"
           >
-            <el-table-column prop="LineId_Name" label="线路" min-width="120" />
+            <el-table-column prop="LineId_Name" label="路线" min-width="120" />
             <el-table-column label="班车时间" min-width="130" align="center">
               <template slot-scope="scope">
                 {{ scope.row.StartTime }} ~ {{ scope.row.EndTime }}
@@ -364,16 +398,16 @@
             />
             <el-table-column
               prop="SitePrice"
-              label="原票价(元)"
+              label="基准票价(元)"
               width="90"
               align="center"
             />
-            <el-table-column
+            <!-- <el-table-column
               prop="SitePrice"
               label="站点价(元)"
               width="100"
               align="center"
-            />
+            /> -->
             <el-table-column
               prop="IsOpen_Name"
               label="状态"
@@ -389,13 +423,20 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="80" align="center">
+            <el-table-column label="操作" width="130" align="center">
               <template slot-scope="scope">
                 <el-button
                   type="text"
                   size="mini"
                   @click="openTplDialog(scope.row)"
                   >编辑</el-button
+                >
+                <el-button
+                  type="text"
+                  size="mini"
+                  class="danger-text"
+                  @click="removeTemplate(scope.row)"
+                  >删除</el-button
                 >
               </template>
             </el-table-column>
@@ -414,9 +455,9 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 新建 / 编辑线路 -->
+    <!-- 新建 / 编辑路线 -->
     <el-dialog
-      :title="lineForm.Id ? '编辑线路 #' + lineForm.Id : '新建线路'"
+      :title="lineForm.Id ? '编辑路线 #' + lineForm.Id : '新建路线'"
       :visible.sync="lineDialogVisible"
       width="640px"
       :close-on-click-modal="false"
@@ -428,7 +469,7 @@
         label-width="96px"
         size="mini"
       >
-        <el-form-item label="线路名称" prop="LineName">
+        <el-form-item label="路线名称" prop="LineName">
           <el-input v-model="lineForm.LineName" placeholder="如：太原-文水" />
         </el-form-item>
         <el-row :gutter="8">
@@ -437,14 +478,18 @@
               <el-select
                 v-model="lineForm.StatingLocation"
                 filterable
-                placeholder="选择站点"
+                remote
+                reserve-keyword
+                :remote-method="remoteMethodStart"
+                :loading="startSearchLoading"
+                placeholder="输入关键字搜索站点"
                 class="full"
               >
                 <el-option
-                  v-for="item in lineForm.Id ? lineSiteList : allSites"
-                  :key="item.LocationId"
-                  :label="item.LocationName"
-                  :value="item.LocationId"
+                  v-for="item in startSites"
+                  :key="item.Id"
+                  :label="item.LocationName + ' - ' + item.ReturnTrip_Name"
+                  :value="item.Id"
                 />
               </el-select>
             </el-form-item>
@@ -454,14 +499,18 @@
               <el-select
                 v-model="lineForm.EndLocation"
                 filterable
-                placeholder="选择站点"
+                remote
+                reserve-keyword
+                :remote-method="remoteMethodEnd"
+                :loading="endSearchLoading"
+                placeholder="输入关键字搜索站点"
                 class="full"
               >
                 <el-option
-                  v-for="item in lineForm.Id ? lineSiteList : allSites"
-                  :key="item.LocationId"
-                  :label="item.LocationName"
-                  :value="item.LocationId"
+                  v-for="item in endSites"
+                  :key="item.Id"
+                  :label="item.LocationName + ' - ' + item.ReturnTrip_Name"
+                  :value="item.Id"
                 />
               </el-select>
             </el-form-item>
@@ -490,7 +539,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="原票价(元)">
+            <el-form-item label="基准票价(元)">
               <el-input-number
                 v-model="lineForm.SitePrice"
                 :min="0"
@@ -513,7 +562,7 @@
           </el-col>
         </el-row>
         <el-form-item label="所属组织">
-          <el-input v-model="lineForm.OrganizationId" />
+          <el-input v-model="lineForm.OrganizationId" disabled />
         </el-form-item>
       </el-form>
       <span slot="footer">
@@ -530,7 +579,7 @@
       </span>
     </el-dialog>
 
-    <!-- 线路站点编排 -->
+    <!-- 路线站点编排 -->
     <el-dialog
       :title="currentLine ? currentLine.LineName + ' - 站点编排' : '站点编排'"
       :visible.sync="lineSiteVisible"
@@ -602,9 +651,9 @@
       </span>
     </el-dialog>
 
-    <!-- 新增 / 编辑单个线路站点 -->
+    <!-- 新增 / 编辑单个路线站点 -->
     <el-dialog
-      :title="lineSiteForm.Id ? '编辑线路站点' : '新增线路站点'"
+      :title="lineSiteForm.Id ? '编辑路线站点' : '新增路线站点'"
       :visible.sync="lineSiteEditVisible"
       width="440px"
       append-to-body
@@ -623,7 +672,12 @@
             <el-option
               v-for="item in allSites"
               :key="item.Id"
-              :label="item.LocationName"
+              :label="
+                item.LocationName +
+                ' (' +
+                returnTripLabel(item.ReturnTrip) +
+                ')'
+              "
               :value="item.Id"
             />
           </el-select>
@@ -659,7 +713,7 @@
           />
         </el-form-item>
         <el-form-item label="所属组织">
-          <el-input v-model="lineSiteForm.OrganizationId" />
+          <el-input v-model="lineSiteForm.OrganizationId" disabled />
         </el-form-item>
       </el-form>
       <span slot="footer">
@@ -690,11 +744,11 @@
         label-width="96px"
         size="mini"
       >
-        <el-form-item label="所属线路" prop="LineId">
+        <el-form-item label="所属路线" prop="LineId">
           <el-select
             v-model="tplForm.LineId"
             filterable
-            placeholder="选择线路"
+            placeholder="选择路线"
             class="full"
             @change="handleTplLineChange"
           >
@@ -774,9 +828,9 @@
         </el-row>
         <el-row :gutter="8">
           <el-col :span="12">
-            <el-form-item label="票价(元)">
+            <el-form-item label="基准票价(元)">
               <el-input-number
-                v-model="tplForm.JourneyPrice"
+                v-model="tplForm.SitePrice"
                 :min="0"
                 :precision="2"
                 :controls="false"
@@ -785,9 +839,9 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="站点价(元)">
+            <el-form-item label="优惠票价(元)">
               <el-input-number
-                v-model="tplForm.SitePrice"
+                v-model="tplForm.JourneyPrice"
                 :min="0"
                 :precision="2"
                 :controls="false"
@@ -826,7 +880,7 @@
           />
         </el-form-item>
         <el-form-item label="所属组织">
-          <el-input v-model="tplForm.OrganizationId" />
+          <el-input v-model="tplForm.OrganizationId" disabled />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="tplForm.Remark" type="textarea" :rows="2" />
@@ -865,6 +919,8 @@ const emptySite = () => ({
   Province: '',
   City: '',
   County: '',
+  // 适用行程：0=公用 1=去程 2=返程
+  ReturnTrip: 0,
   OrganizationId: DEFAULT_ORG,
   Status: true,
 })
@@ -919,7 +975,6 @@ const emptyTpl = () => ({
   EndTime: '',
   JourneyPrice: 0,
   SitePrice: 0,
-  SitePrice: 0,
   IntervalTime: 0,
   IsOpen: true,
   Remark: '',
@@ -939,6 +994,11 @@ export default {
       searching: false,
       searchResults: [],
       // —— 站点 ——
+      returnTripOptions: [
+        { value: 0, label: '公用' },
+        { value: 1, label: '去程' },
+        { value: 2, label: '返程' },
+      ],
       siteForm: emptySite(),
       siteSaving: false,
       siteLoading: false,
@@ -946,12 +1006,16 @@ export default {
       siteTotal: 0,
       sitePage: { pageIndex: 1, pageSize: 10 },
       allSites: [],
+      startSites: [],
+      endSites: [],
+      startSearchLoading: false,
+      endSearchLoading: false,
       siteRules: {
         LocationName: [
           { required: true, message: '请输入站点名称', trigger: 'blur' },
         ],
       },
-      // —— 线路 ——
+      // —— 路线 ——
       lineList: [],
       lineTotal: 0,
       lineLoading: false,
@@ -962,7 +1026,7 @@ export default {
       lineForm: emptyLine(),
       lineRules: {
         LineName: [
-          { required: true, message: '请输入线路名称', trigger: 'blur' },
+          { required: true, message: '请输入路线名称', trigger: 'blur' },
         ],
         StatingLocation: [
           { required: true, message: '请选择起点站', trigger: 'change' },
@@ -971,7 +1035,7 @@ export default {
           { required: true, message: '请选择终点站', trigger: 'change' },
         ],
       },
-      // —— 线路站点 ——
+      // —— 路线站点 ——
       lineSiteVisible: false,
       lineSiteLoading: false,
       lineSiteList: [],
@@ -996,13 +1060,13 @@ export default {
       tplDialogVisible: false,
       tplSaving: false,
       tplForm: emptyTpl(),
-      // 模板下拉数据：线路 / 司机 / 车辆（来自后台字典接口）
+      // 模板下拉数据：路线 / 司机 / 车辆（来自后台字典接口）
       tplLines: [],
       tplDrivers: [],
       tplCars: [],
       tplOptionsLoading: false,
       tplRules: {
-        LineId: [{ required: true, message: '请选择线路', trigger: 'change' }],
+        LineId: [{ required: true, message: '请选择路线', trigger: 'change' }],
         StartTime: [
           { required: true, message: '请选择开始时间', trigger: 'change' },
         ],
@@ -1241,13 +1305,13 @@ export default {
         this.siteLoading = false
       }
     },
-    // 全量站点：下拉选项、线路起终点、途经点共用
+    // 全量站点：下拉选项、路线起终点、途经点共用
     async loadAllSites() {
       try {
         const res = await request({
-          url: '/BusOrder/GetPageList',
+          url: '/BusOrder/GetSearchBusLocation',
           method: 'post',
-          data: { pageIndex: 1, pageSize: 500 },
+          data: {},
           noDuplicate: true,
         })
         console.log('loadAllSites', res)
@@ -1255,6 +1319,41 @@ export default {
       } catch (e) {
         this.allSites = []
       }
+    },
+    // 路线弹窗站点远程搜索：type 为 'start' / 'end'，两列互不影响
+    async searchLocation(query, type) {
+      const isStart = type === 'start'
+      if (!query) {
+        if (!this.allSites.length) await this.loadAllSites()
+        if (isStart) this.startSites = this.allSites
+        else this.endSites = this.allSites
+        return
+      }
+      if (isStart) this.startSearchLoading = true
+      else this.endSearchLoading = true
+      try {
+        const res = await request({
+          url: '/BusOrder/GetSearchBusLocation',
+          method: 'post',
+          data: { LocationName: query },
+          noDuplicate: true,
+        })
+        const list = res.data || []
+        if (isStart) this.startSites = list
+        else this.endSites = list
+      } catch (e) {
+        if (isStart) this.startSites = []
+        else this.endSites = []
+      } finally {
+        if (isStart) this.startSearchLoading = false
+        else this.endSearchLoading = false
+      }
+    },
+    remoteMethodStart(query) {
+      return this.searchLocation(query, 'start')
+    },
+    remoteMethodEnd(query) {
+      return this.searchLocation(query, 'end')
     },
     handleSiteSizeChange(size) {
       this.sitePage.pageSize = size
@@ -1268,6 +1367,13 @@ export default {
     resetSiteForm() {
       this.siteForm = emptySite()
       if (this.$refs.siteForm) this.$refs.siteForm.clearValidate()
+    },
+    // 适用行程文案：0=公用 1=去程 2=返程
+    returnTripLabel(val) {
+      const hit = this.returnTripOptions.find(
+        (item) => item.value === Number(val),
+      )
+      return hit ? hit.label : '公用'
     },
     async editSite(row) {
       try {
@@ -1286,6 +1392,8 @@ export default {
           Province: detail.Province || '',
           City: detail.City || '',
           County: detail.County || '',
+          ReturnTrip:
+            detail.ReturnTrip == null ? 0 : Number(detail.ReturnTrip) || 0,
           OrganizationId: detail.OrganizationId || DEFAULT_ORG,
           Status: detail.Status !== false,
         })
@@ -1327,6 +1435,7 @@ export default {
           Province: this.siteForm.Province || null,
           City: this.siteForm.City || null,
           County: this.siteForm.County || null,
+          ReturnTrip: Number(this.siteForm.ReturnTrip) || 0,
           Status: this.siteForm.Status,
         }
         try {
@@ -1355,9 +1464,10 @@ export default {
       })
     },
 
-    // ==================== 线路 ====================
+    // ==================== 路线 ====================
     async loadLines() {
       this.lineLoading = true
+      console.log('111')
       try {
         const res = await request({
           url: '/BusOrder/GetBusLinePageList',
@@ -1377,6 +1487,7 @@ export default {
       }
     },
     async loadAllLines() {
+      console.log('222')
       try {
         const res = await request({
           url: '/BusOrder/GetBusLinePageList',
@@ -1402,8 +1513,9 @@ export default {
       console.log('openLineDialog', row)
       this.currentLine = row
       await this.loadLineSites()
-      if (!this.allLines.length) this.loadAllLines()
-      if (!this.allSites.length) this.loadAllSites()
+      if (!this.allSites.length) await this.loadAllSites()
+      this.startSites = this.allSites
+      this.endSites = this.allSites
       if (row && row.Id) {
         try {
           const res = await request({
@@ -1467,7 +1579,7 @@ export default {
           Message.success(
             this.lineForm.Id
               ? '保存成功'
-              : '线路创建成功，请在该线路的「站点编排」里添加上车点/下车点',
+              : '路线创建成功，请在该路线的「站点编排」里添加上车点/下车点',
           )
           this.lineDialogVisible = false
           this.loadLines()
@@ -1480,7 +1592,7 @@ export default {
       })
     },
 
-    // ==================== 线路站点 ====================
+    // ==================== 路线站点 ====================
     async openLineSites(line) {
       console.log('openLineSites', line)
       this.currentLine = line
@@ -1582,11 +1694,11 @@ export default {
         this.lineSiteSaving = false
       }
     },
-    // 删除线路站点
+    // 删除路线站点
     async removeLineSite(row) {
       try {
         await this.$confirm(
-          `确定把「${row.LocationName}」从该线路上移除吗？`,
+          `确定把「${row.LocationName}」从该路线上移除吗？`,
           '提示',
           {
             type: 'warning',
@@ -1599,18 +1711,107 @@ export default {
       }
       try {
         await request({
-          url: '/BusOrder/DeleteBusLineSite',
-          method: 'post',
-          data: { Id: row.Id },
+          url: '/BusOrder/BusLineSiteDelete',
+          method: 'get',
+          params: { Id: row.Id },
         })
         Message.success('删除成功')
         this.loadLineSites()
       } catch (e) {
-        // 接口未上线时（404）拦截器已提示，这里补一句上下文
-        Message.warning(
-          '删除失败，请确认后端已提供 /BusOrder/DeleteBusLineSite',
-        )
+        // 拦截器已提示
       }
+    },
+
+    /* ===== 删除（站点 / 路线 / 班车模板）：后端接口暂未提供，先做确认交互 ===== */
+
+    // 删除站点：GET /BusOrder/DeleteBusLocation?Id=
+    async removeSite(row) {
+      try {
+        await this.$confirm(
+          `确定删除站点「${row.LocationName}」吗？删除后不可恢复`,
+          '提示',
+          {
+            type: 'warning',
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+          },
+        )
+      } catch (e) {
+        return // 取消
+      }
+      try {
+        await request({
+          url: '/BusOrder/DeleteBusLocatio',
+          method: 'get',
+          params: { Id: row.Id },
+        })
+        Message.success('删除成功')
+        this.loadSites()
+        this.loadAllSites()
+      } catch (e) {
+        // 拦截器已提示
+      }
+    },
+
+    // 删除路线：GET /BusOrder/BusLineDelete?Id=
+    async removeLine(row) {
+      try {
+        await this.$confirm(
+          `确定删除路线「${row.LineName}」吗？删除后不可恢复`,
+          '提示',
+          {
+            type: 'warning',
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+          },
+        )
+      } catch (e) {
+        return // 取消
+      }
+      try {
+        await request({
+          url: '/BusOrder/BusLineDelete',
+          method: 'get',
+          params: { Id: row.Id },
+        })
+        Message.success('删除成功')
+        this.loadLines()
+        this.loadAllLines()
+      } catch (e) {
+        // 拦截器已提示
+      }
+    },
+
+    // 删除班车模板：TODO 接口上线后放开 request，按后端文档调整 url 与参数
+    async removeTemplate(row) {
+      try {
+        await this.$confirm(
+          `确定删除班车模板（${row.LineId_Name || '该路线'} ${
+            row.StartTime || ''
+          } ~ ${row.EndTime || ''}）吗？删除后不可恢复`,
+          '提示',
+          {
+            type: 'warning',
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+          },
+        )
+      } catch (e) {
+        return // 取消
+      }
+      Message.info('删除接口暂未提供，等待后端上线后开放')
+      // TODO: 接口上线后启用
+      // try {
+      //   await request({
+      //     url: '/BusOrder/DeleteBusLineTemplate',
+      //     method: 'post',
+      //     data: { Id: row.Id },
+      //   })
+      //   Message.success('删除成功')
+      //   this.loadTemplates()
+      // } catch (e) {
+      //   // 拦截器已提示
+      // }
     },
 
     // ==================== 班车模板 ====================
@@ -1639,7 +1840,7 @@ export default {
     handleTplPageChange(page) {
       this.tplPage.pageIndex = page
     },
-    // 模板下拉数据：线路 / 司机 / 车辆，全部直接取后台接口返回
+    // 模板下拉数据：路线 / 司机 / 车辆，全部直接取后台接口返回
     // （司机、车辆接口未上线时静默失败，下拉为空；输入框仍支持手填 ID）
     async loadTplOptions() {
       if (this.tplOptionsLoading) return
@@ -1710,7 +1911,7 @@ export default {
         if (this.$refs.tplForm) this.$refs.tplForm.clearValidate()
       })
     },
-    // 选线路时带出该线路所属组织（线路只取 GetBusLineList 的返回）
+    // 选路线时带出该路线所属组织（路线只取 GetBusLineList 的返回）
     handleTplLineChange(lineId) {
       const line = this.tplLines.find((item) => item.Id === lineId)
       if (line && line.OrganizationId) {
