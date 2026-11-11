@@ -9,6 +9,11 @@
     "build": "webpack --config config/webpack.prod.js",
     "build:test": "webpack --config config/webpack.test.js",
     "build:prod": "webpack --config config/webpack.prod.js",
+    "build:home": "webpack --config config/webpack.page.js --env page=Home",
+    "build:admin": "webpack --config config/webpack.page.js --env page=BusAdmin",
+    "build:operations": "webpack --config config/webpack.page.js --env page=BusOperations",
+    "build:order": "webpack --config config/webpack.page.js --env page=BusOrderFlow",
+    "build:pages": "npm run build:home && npm run build:admin && npm run build:operations && npm run build:order",
     "start": "npm run dev"
   },
   "dependencies": {

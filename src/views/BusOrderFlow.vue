@@ -32,7 +32,7 @@
             placeholder="选择路线"
             class="line-select"
             :loading="lineLoading"
-            @change="searchSchedules"
+            @change="onLineChange"
           >
             <el-option
               v-for="item in lines"
@@ -83,8 +83,8 @@
       <div class="panel__head">
         <span class="panel__title">
           班次
-          <span class="panel__tip" v-if="currentLine.LineName">
-            {{ currentLine.LineName }} · {{ today }}
+          <span class="panel__tip" v-if="orderLine.LineName">
+            {{ orderLine.LineName }} · {{ today }}
           </span>
         </span>
       </div>
@@ -116,11 +116,9 @@
             </div>
             <div class="schedule-card__meta">
               <span>余 {{ item.EmptySeat }} / {{ item.SeatTotal }} 座</span>
-              <span class="price">成人 ¥ {{ money(adultPriceOf(item)) }}</span>
+              <span class="price">票价 ¥ {{ item.TicketPrice }}</span>
             </div>
-            <div class="schedule-card__child">
-              儿童 ¥ {{ money(childPriceOf(item)) }}
-            </div>
+            <div class="schedule-card__child">原价 ¥ {{ item.SitePrice }}</div>
             <div class="schedule-card__foot">
               <!-- <el-tag size="mini" type="info">{{
                 item.IsStart_Name || '-'
@@ -220,7 +218,7 @@
       </div>
       <template v-else>
         <div class="schedule-summary">
-          <span class="strong">{{ currentLine.LineName }}</span>
+          <span class="strong">{{ orderLine.LineName || '-' }}</span>
           <span>{{ schedule.DepartureTime }}</span>
           <span>
             {{ boardSiteName }}
@@ -317,6 +315,80 @@
         >
       </div>
     </div>
+
+    <!-- ==================== 下单信息确认预览 ==================== -->
+    <el-dialog
+      title="确认订单信息"
+      :visible.sync="confirmVisible"
+      width="560px"
+      :close-on-click-modal="false"
+    >
+      <div class="confirm-preview">
+        <div class="cp-row">
+          <span class="cp-label">路线</span>
+          <span>{{ orderLine.LineName || '-' }}</span>
+        </div>
+        <div class="cp-row">
+          <span class="cp-label">班次</span>
+          <span
+            >{{ today }} {{ (schedule.DepartureTime || '').slice(11, 16) }}</span
+          >
+        </div>
+        <div class="cp-row">
+          <span class="cp-label">上下车站</span>
+          <span>{{ boardSiteName }} → {{ alightSiteName }}</span>
+        </div>
+        <div class="cp-row">
+          <span class="cp-label">联系人电话</span>
+          <span>{{ contactPhone }}</span>
+        </div>
+        <div class="cp-row" v-if="remark">
+          <span class="cp-label">备注</span>
+          <span>{{ remark }}</span>
+        </div>
+        <el-table
+          :data="passengers"
+          size="mini"
+          border
+          style="width: 100%; margin-top: 8px"
+        >
+          <el-table-column prop="Name" label="姓名" width="80" />
+          <el-table-column prop="Phone" label="电话" width="110" />
+          <el-table-column prop="IdCard" label="身份证" min-width="160" />
+          <el-table-column label="类型" width="60" align="center">
+            <template slot-scope="scope">{{
+              scope.row.isChild ? '儿童' : '成人'
+            }}</template>
+          </el-table-column>
+          <el-table-column label="票价" width="80" align="center">
+            <template slot-scope="scope"
+              >¥{{
+                money(
+                  scope.row.isChild
+                    ? scheduleChildPrice
+                    : scheduleAdultPrice,
+                )
+              }}</template
+            >
+          </el-table-column>
+        </el-table>
+        <div class="cp-total">
+          合计：<span class="strong">¥ {{ money(orderTotal) }}</span>
+          <span class="cp-tip"
+            >（成人 ¥{{ money(scheduleAdultPrice) }} × {{ adultCount
+            }}<template v-if="childCount">
+              · 儿童 ¥{{ money(scheduleChildPrice) }} × {{ childCount }}
+            </template>）</span
+          >
+        </div>
+      </div>
+      <div slot="footer">
+        <el-button @click="confirmVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="doSubmitOrder"
+          >确认下单</el-button
+        >
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -417,6 +489,7 @@ export default {
       contactPhone: '',
       remark: '',
       submitting: false,
+      confirmVisible: false, // 下单确认预览框
     }
   },
   computed: {
@@ -424,15 +497,33 @@ export default {
       const list = Array.isArray(this.lines) ? this.lines : []
       return list.find((item) => item.Id === this.lineId) || {}
     },
+    // 下单用的线路：优先取"路线"下拉选中的线路；没选线路时直接用班次自带的线路信息
+    orderLine() {
+      if (this.currentLine.Id) return this.currentLine
+      if (this.schedule && this.schedule.LineId) {
+        return {
+          Id: this.schedule.LineId,
+          LineName:
+            this.schedule.LineId_Name ||
+            this.schedule.LineName ||
+            this.schedule.StartSiteName +
+              (this.schedule.EndSiteName
+                ? ' → ' + this.schedule.EndSiteName
+                : ''),
+        }
+      }
+      return {}
+    },
     boardSiteName() {
+      // 下拉的 value 是 LocationId，需按 LocationId 匹配
       const site = this.startSiteList.find(
-        (s) => (s.Id || s.SiteId) === this.boardSiteId,
+        (s) => (s.LocationId || s.Id || s.SiteId) === this.boardSiteId,
       )
       return site ? site.LocationName || site.SiteName || site.Name : '-'
     },
     alightSiteName() {
       const site = this.endSiteList.find(
-        (s) => (s.Id || s.SiteId) === this.alightSiteId,
+        (s) => (s.LocationId || s.Id || s.SiteId) === this.alightSiteId,
       )
       return site ? site.LocationName || site.SiteName || site.Name : '-'
     },
@@ -553,16 +644,21 @@ export default {
       this.alightSiteId = null
       this.startSiteList = []
       this.endSiteList = []
-      if (this.lineId) this.searchSchedules()
+      this.searchSchedules()
+    },
+    // 路线切换/清空：清掉已选班次和上下车站，再重查班次
+    onLineChange() {
+      this.schedule = {}
+      this.boardSiteId = null
+      this.alightSiteId = null
+      this.startSiteList = []
+      this.endSiteList = []
+      this.searchSchedules()
     },
     // 路线运营时刻：POST /BusOrder/GetBusIndexLineList
     // 参数：citys=路线(城市对) today=日期 SearchSiteId=热门站点(逗号串) BusLineId=线路Id
     // 返回：data.Bus_ShiftList 为班次列表
     async searchSchedules() {
-      if (!this.lineId) {
-        Message.warning('请选择线路')
-        return
-      }
       if (!this.today) {
         Message.warning('请选择出发日期')
         return
@@ -592,10 +688,10 @@ export default {
       this.schedule = item
       this.boardSiteId = null
       this.alightSiteId = null
-      await this.fetchSiteList()
+      await this.fetchSiteList(item.LineId)
     },
     // 调用接口获取路线站点信息
-    async fetchSiteList() {
+    async fetchSiteList(lineId) {
       this.siteLoading = true
       try {
         const res = await request({
@@ -603,7 +699,7 @@ export default {
           method: 'post',
           data: {
             ScheduleId: this.schedule.Id,
-            LineId: String(this.lineId),
+            LineId: String(lineId),
             DepartureTime: this.schedule.DepartureTime,
           },
         })
@@ -646,7 +742,7 @@ export default {
       return !item.idCardError
     },
     validate() {
-      const line = this.currentLine
+      const line = this.orderLine
       if (!line.Id) {
         Message.warning('请选择路线')
         return false
@@ -686,15 +782,20 @@ export default {
       }
       return true
     },
-    async submitOrder() {
+    // 提交订单：先校验，通过后弹出确认预览框
+    submitOrder() {
       if (!this.validate()) return
-      const line = this.currentLine
+      this.confirmVisible = true
+    },
+    // 预览框点"确认下单"后真正提交
+    async doSubmitOrder() {
+      const line = this.orderLine
       const personalIds = this.passengers
         .map(
           (p) =>
             `${String(p.Name).trim()}|${String(p.Phone).trim()}|${String(
               p.IdCard || '',
-            ).trim()}`,
+            ).trim()}|${p.isChild ? 1 : 0}`,
         )
         .join(',')
       this.submitting = true
@@ -717,6 +818,7 @@ export default {
         Message.success(
           orderNo ? `下单成功，订单号：${orderNo}` : res.msg || '下单成功',
         )
+        this.confirmVisible = false
         this.resetFlow()
       } catch (e) {
         // 错误提示由 request 拦截器统一弹出
@@ -957,6 +1059,37 @@ export default {
   }
   ::v-deep .danger-text {
     color: $danger;
+  }
+
+  // 下单确认预览框
+  .confirm-preview {
+    .cp-row {
+      display: flex;
+      margin-bottom: 6px;
+      font-size: 13px;
+      color: #606266;
+    }
+    .cp-label {
+      width: 80px;
+      flex-shrink: 0;
+      color: #909399;
+    }
+    .cp-total {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #606266;
+
+      .strong {
+        font-size: 18px;
+        font-weight: 600;
+        color: $danger;
+      }
+      .cp-tip {
+        margin-left: 6px;
+        font-size: 12px;
+        color: #909399;
+      }
+    }
   }
 }
 </style>

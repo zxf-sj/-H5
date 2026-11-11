@@ -1,0 +1,3 @@
+npm run build:pages — 一条命令打出上面四个单独的 HTML 文件（推荐）
+npm run build:admin / build:operations / build:order / build:about — 只打包其中一个
+npm run build — 还是老的全量打包，出 dist/index.html（包含所有页面）。注意：它会清空 dist 再重建，所以不要先 build 再 build:pages，否则页面文件会被清掉；要四个单独的就直接用 build:pages

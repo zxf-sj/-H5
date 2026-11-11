@@ -136,8 +136,11 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="90" align="center" fixed="right">
+        <el-table-column label="操作" width="120" align="center" fixed="right">
           <template slot-scope="scope">
+            <el-button type="text" size="mini" @click="openEdit(scope.row)"
+              >修改</el-button
+            >
             <el-button type="text" size="mini" @click="openDetail(scope.row)"
               >详情</el-button
             >
@@ -225,6 +228,152 @@
         <el-button size="small" @click="detailVisible = false">关闭</el-button>
       </span>
     </el-dialog>
+
+    <!-- 修改订单弹窗 -->
+    <el-dialog
+      title="修改订单"
+      :visible.sync="editVisible"
+      width="560px"
+      :close-on-click-modal="false"
+    >
+      <el-form
+        ref="editForm"
+        :model="editForm"
+        :rules="editRules"
+        label-width="100px"
+        size="mini"
+      >
+        <el-form-item label="线路" prop="LineId">
+          <el-select
+            v-model="editForm.LineId"
+            filterable
+            placeholder="选择线路"
+            class="full"
+          >
+            <el-option
+              v-for="item in lineList"
+              :key="item.Id"
+              :label="item.LineName"
+              :value="item.Id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="司机" prop="DriverId">
+          <el-input
+            v-model="editForm.DriverId"
+            placeholder="司机标识，如：300038-8831C83B8D2A40E48BE904AC0E944709"
+          />
+        </el-form-item>
+        <el-form-item label="车辆" prop="VehicleId">
+          <el-input-number
+            v-model="editForm.VehicleId"
+            :min="0"
+            :controls="false"
+            class="full"
+          />
+        </el-form-item>
+        <el-form-item label="班次日期" prop="ScheduleDate">
+          <el-date-picker
+            v-model="editForm.ScheduleDate"
+            type="date"
+            format="yyyy-MM-dd"
+            value-format="yyyy-MM-dd"
+            class="full"
+          />
+        </el-form-item>
+        <el-form-item label="发车时间" prop="DepartureTime">
+          <el-date-picker
+            v-model="editForm.DepartureTime"
+            type="datetime"
+            format="yyyy-MM-dd HH:mm:ss"
+            value-format="yyyy-MM-dd HH:mm:ss"
+            class="full"
+          />
+        </el-form-item>
+        <el-form-item label="结束时间" prop="EndTime">
+          <el-date-picker
+            v-model="editForm.EndTime"
+            type="datetime"
+            format="yyyy-MM-dd HH:mm:ss"
+            value-format="yyyy-MM-dd HH:mm:ss"
+            class="full"
+          />
+        </el-form-item>
+        <el-row :gutter="8">
+          <el-col :span="12">
+            <el-form-item label="基准票价" prop="SitePrice">
+              <el-input-number
+                v-model="editForm.SitePrice"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="优惠票价" prop="TicketPrice">
+              <el-input-number
+                v-model="editForm.TicketPrice"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="8">
+          <el-col :span="8">
+            <el-form-item label="总座位数">
+              <el-input-number
+                v-model="editForm.SeatTotal"
+                :min="0"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="已售座位">
+              <el-input-number
+                v-model="editForm.SeatSold"
+                :min="0"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="上车人数">
+              <el-input-number
+                v-model="editForm.PersonNum"
+                :min="0"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="售卖开关">
+          <el-switch
+            v-model="editForm.IsSale"
+            active-text="开"
+            inactive-text="关"
+          />
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button size="small" @click="editVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          size="small"
+          :loading="editSaving"
+          @click="saveEdit"
+          >保存</el-button
+        >
+      </span>
+    </el-dialog>
   </div>
 </template>
 
@@ -260,6 +409,24 @@ export default {
       detailLoading: false,
       detail: null,
       detailRow: null,
+      // —— 修改订单 ——
+      editVisible: false,
+      editSaving: false,
+      editForm: {},
+      editRules: {
+        LineId: [
+          { required: true, message: '请选择线路', trigger: 'change' },
+        ],
+        DriverId: [
+          { required: true, message: '请填写司机标识', trigger: 'blur' },
+        ],
+        ScheduleDate: [
+          { required: true, message: '请选择班次日期', trigger: 'change' },
+        ],
+        DepartureTime: [
+          { required: true, message: '请选择发车时间', trigger: 'change' },
+        ],
+      },
     }
   },
   computed: {
@@ -380,6 +547,70 @@ export default {
         this.detailLoading = false
       }
     },
+    // 修改订单：按列表行预填表单
+    openEdit(row) {
+      if (!row || !row.Id) return
+      const dt = row.DepartureTime || row.StartTime || ''
+      this.editForm = {
+        Id: row.Id,
+        LineId: row.LineId,
+        DriverId: row.DriverId || '',
+        VehicleId: row.VehicleId,
+        ScheduleDate: row.ScheduleDate || String(dt).slice(0, 10),
+        DepartureTime: dt ? this.normalizeTime(dt) : '',
+        EndTime: row.EndTime ? this.normalizeTime(row.EndTime) : '',
+        TicketPrice: Number(row.TicketPrice) || 0,
+        SitePrice: Number(row.SitePrice) || 0,
+        IsSale: this.isSaleOn(row),
+        SeatTotal: Number(row.SeatTotal) || 0,
+        SeatSold: Number(row.SeatSold) || 0,
+        PersonNum: Number(row.PersonNum) || 0,
+      }
+      this.editVisible = true
+      this.$nextTick(() => {
+        if (this.$refs.editForm) this.$refs.editForm.clearValidate()
+      })
+    },
+    // 统一时间格式为 yyyy-MM-dd HH:mm:ss
+    normalizeTime(v) {
+      const s = String(v).replace('T', ' ')
+      return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s) ? s.slice(0, 19) : s
+    },
+    // 保存修改：POST /BusOrder/Update
+    saveEdit() {
+      this.$refs.editForm.validate(async (valid) => {
+        if (!valid) return
+        this.editSaving = true
+        try {
+          await request({
+            url: '/BusOrder/Update',
+            method: 'post',
+            data: {
+              LineId: this.editForm.LineId,
+              DriverId: this.editForm.DriverId,
+              VehicleId: this.editForm.VehicleId,
+              ScheduleDate: this.editForm.ScheduleDate,
+              DepartureTime: this.editForm.DepartureTime,
+              TicketPrice: this.editForm.TicketPrice,
+              SitePrice: this.editForm.SitePrice,
+              IsSale: this.editForm.IsSale,
+              SeatTotal: this.editForm.SeatTotal,
+              SeatSold: this.editForm.SeatSold,
+              EndTime: this.editForm.EndTime || null,
+              PersonNum: this.editForm.PersonNum,
+              Id: this.editForm.Id,
+            },
+          })
+          Message.success('修改成功')
+          this.editVisible = false
+          this.loadList()
+        } catch (e) {
+          // 错误提示由 request 拦截器统一弹出
+        } finally {
+          this.editSaving = false
+        }
+      })
+    },
     handleDetailClosed() {
       this.detail = null
       this.detailRow = null
@@ -430,6 +661,10 @@ export default {
     max-height: 66vh;
     overflow-y: auto;
     padding-right: 6px;
+  }
+
+  .full {
+    width: 100%;
   }
 
   ::v-deep .el-descriptions-item__label {

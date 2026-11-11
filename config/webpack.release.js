@@ -1,20 +1,66 @@
+const path = require('path');
 const webpack = require('webpack');
 const { merge } = require('webpack-merge');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 const common = require('./webpack.common.js');
 const { styleUse } = require('./style-loaders');
 const { loadEnv, envDefinePlugin } = require('./load-env');
 
 /**
- * 发布配置工厂（test / production 共用）：
+ * 单页打包映射表：页面名 → 产物文件名
+ * - Home.vue          → BusOrderList.html      巴士订单
+ * - BusAdmin.vue      → BusLineSiteMgr.html    巴士管理
+ * - BusOrderFlow.vue  → CreateBusOrder.html    巴士下单
+ * - BusOperations.vue → BusCapacity.html       巴士运营
+ */
+const PAGE_FILES = {
+  Home: 'BusOrderList.html',
+  BusAdmin: 'BusLineSiteMgr.html',
+  BusOrderFlow: 'CreateBusOrder.html',
+  BusOperations: 'BusCapacity.html'
+};
+
+/**
+ * 发布配置工厂（test / production / 单页 共用）：
  * - 样式走 style-loader（CSS 打进 JS），图片/字体转 base64
  * - LimitChunkCountPlugin 合并所有分包
- * - InlineHtmlAssetsPlugin 把 main.js 内联进 index.html，得到自包含单文件
- * 产物 dist/index.html 可直接双击用 file:// 打开（路由用 hash 模式）。
+ * - InlineHtmlAssetsPlugin 把 main.js 内联进 HTML，得到自包含单文件
+ * 产物可直接双击用 file:// 打开（路由用 hash 模式）。
  *
  * @param {object} [env] 环境常量对象；缺省读取 .env.production
+ * @param {{ page?: string }} [options] 单页打包选项；
+ *   options.page 传页面名（见 PAGE_FILES）时，
+ *   入口改为 src/pages/<page>.js，产物输出为 dist/<PAGE_FILES[page]>（自包含单文件），
+ *   只包含该页面自身的代码，不含其它页面组件。
  */
-function createReleaseConfig(env) {
+function createReleaseConfig(env, options) {
   const finalEnv = env || loadEnv('production');
+  const page = options && options.page;
+
+  // 单页打包：换入口，并用映射表里的文件名覆盖 common 里的 index.html 模板输出
+  let base = common;
+  const pageOverrides = {};
+  if (page) {
+    if (!PAGE_FILES[page]) {
+      throw new Error(
+        `未知页面：${page}，可选：${Object.keys(PAGE_FILES).join(' / ')}`
+      );
+    }
+    base = {
+      ...common,
+      plugins: common.plugins.filter((p) => !(p instanceof HtmlWebpackPlugin))
+    };
+    pageOverrides.entry = path.resolve(__dirname, `../src/pages/${page}.js`);
+    // 各页面产物共存于 dist，不能像全量打包那样清空输出目录
+    pageOverrides.output = { clean: false };
+    pageOverrides.plugins = [
+      new HtmlWebpackPlugin({
+        template: path.resolve(__dirname, '../public/index.html'),
+        filename: PAGE_FILES[page],
+        inject: 'body'
+      })
+    ];
+  }
 
   class InlineHtmlAssetsPlugin {
     apply(compiler) {
@@ -27,7 +73,8 @@ function createReleaseConfig(env) {
             stage: Compilation.PROCESS_ASSETS_STAGE_REPORT + 100
           },
           (assets) => {
-            const htmlName = Object.keys(assets).find((n) => /(^|\/)index\.html$/.test(n));
+            // 全量打包只有 index.html；单页打包只有 <page>.html
+            const htmlName = Object.keys(assets).find((n) => /\.html$/.test(n));
             const jsName = Object.keys(assets).find((n) => /^js\/main[^/]*\.js$/.test(n));
             if (!htmlName || !jsName) return;
 
@@ -60,7 +107,7 @@ function createReleaseConfig(env) {
     }
   }
 
-  return merge(common, {
+  return merge(base, pageOverrides, {
     mode: 'production',
     output: {
       // file:// 打开时，'auto' 会基于 document.baseURI 解析相对资源

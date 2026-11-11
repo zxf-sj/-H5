@@ -12,9 +12,9 @@ const pickNum = (obj, keys) => {
   return 0
 }
 
-// 成人票价
+// 成人票价：有优惠票价(TicketPrice/JourneyPrice)用优惠价，否则用原价(SitePrice)
 export function adultPriceOf(item) {
-  return pickNum(item, 'SitePrice')
+  return pickNum(item, ['TicketPrice', 'JourneyPrice', 'SitePrice'])
 }
 
 // 成人原价
