@@ -121,11 +121,13 @@
         <el-table-column
           prop="StatingLocation_Name"
           label="出发地点"
+          width="220"
           align="center"
         />
         <el-table-column
           prop="EndLocation_Name"
           label="到达地点"
+          width="220"
           align="center"
         />
         <el-table-column prop="Member_Name" label="下单人姓名" align="center" />
@@ -134,7 +136,7 @@
           label="下单人手机号"
           align="center"
         />
-        <el-table-column fixed="right" label="操作" width="220" align="center">
+        <el-table-column fixed="right" label="操作" width="120" align="center">
           <template slot-scope="scope">
             <el-button @click="handleDetail(scope.row)" type="text" size="small"
               >查看</el-button
@@ -392,15 +394,18 @@
                 </el-form-item>
               </el-col>
               <el-col :span="8">
-                <el-form-item label="日期">
-                  <el-radio-group
-                    v-model="editDateType"
-                    size="mini"
-                    @change="onEditDateTypeChange"
-                  >
-                    <el-radio-button label="today">今天</el-radio-button>
-                    <el-radio-button label="tomorrow">明天</el-radio-button>
-                  </el-radio-group>
+                <el-form-item label="出发日期">
+                  <el-date-picker
+                    v-model="editDate"
+                    type="date"
+                    format="yyyy-MM-dd"
+                    value-format="yyyy-MM-dd"
+                    placeholder="选择出发日期"
+                    class="full"
+                    :clearable="false"
+                    :picker-options="editDateOptions"
+                    @change="onEditDateChange"
+                  />
                 </el-form-item>
               </el-col>
               <el-col :span="8">
@@ -411,7 +416,6 @@
                     :placeholder="'选择班次（' + editDate + '）'"
                     class="full"
                     :loading="scheduleLoading"
-                    @change="onEditScheduleChange"
                   >
                     <el-option
                       v-for="item in scheduleList"
@@ -433,40 +437,16 @@
             <el-row :gutter="8">
               <el-col :span="8">
                 <el-form-item label="出发地点">
-                  <el-select
-                    v-model="editForm.StatingLocation"
-                    filterable
-                    placeholder="选择站点"
-                    class="full"
-                    disabled
-                    :loading="editSiteLoading"
-                  >
-                    <el-option
-                      v-for="item in editBoardSites"
-                      :key="item.LocationId"
-                      :label="item.LocationName"
-                      :value="item.LocationId"
-                    />
-                  </el-select>
+                  <div class="edit-static">
+                    {{ editForm.StatingLocation_Name || '-' }}
+                  </div>
                 </el-form-item>
               </el-col>
               <el-col :span="8">
                 <el-form-item label="到达地点">
-                  <el-select
-                    v-model="editForm.EndLocation"
-                    filterable
-                    placeholder="选择站点"
-                    class="full"
-                    disabled
-                    :loading="editSiteLoading"
-                  >
-                    <el-option
-                      v-for="item in editAlightSites"
-                      :key="item.LocationId"
-                      :label="item.LocationName"
-                      :value="item.LocationId"
-                    />
-                  </el-select>
+                  <div class="edit-static">
+                    {{ editForm.EndLocation_Name || '-' }}
+                  </div>
                 </el-form-item>
               </el-col>
               <el-col :span="8">
@@ -846,7 +826,9 @@ export default {
         Remark: '',
         OrderStatus: 0,
         StatingLocation: null,
+        StatingLocation_Name: '',
         EndLocation: null,
+        EndLocation_Name: '',
         AdultNum: 0,
         Children: 0,
         PersonNum: 0,
@@ -854,13 +836,21 @@ export default {
       editPassengers: [{ Name: '', Phone: '', IdCard: '' }],
       editDeparture: '', // 订单原出发时间，兜底匹配班次用
       editOrderPast: false, // 订单出发日期是否早于今天（过去了就不回显原班次/站点）
-      editDateType: 'today', // 班次/站点查询日期：today=今天（默认） tomorrow=明天
+      editDate: '', // 修改订单：出发日期（回显时同步订单出发日）
+      editDateOptions: {
+        // 只能选当天和第二天
+        disabledDate(d) {
+          const t = new Date()
+          t.setHours(0, 0, 0, 0)
+          const today = t.getTime()
+          const tomorrow = today + 24 * 60 * 60 * 1000
+          const v = d.getTime()
+          return v < today || v > tomorrow
+        },
+      },
       scheduleList: [], // 班次下拉
       scheduleLoading: false,
       allSites: [], // 全量站点，编辑回填反查用
-      editBoardSites: [], // 修改订单：出发地点下拉（GetBusLineSiteInfo 按路线返回）
-      editAlightSites: [], // 修改订单：到达地点下拉
-      editSiteLoading: false,
       payTypeOptions: [
         { value: 1, label: '微信支付' },
         { value: 2, label: '云闪付' },
@@ -900,23 +890,6 @@ export default {
       return (
         (Number(this.editForm.AdultNum) || 0) +
         (Number(this.editForm.Children) || 0)
-      )
-    },
-    // 班次/站点查询日期：默认今天，选「明天」按钮则 +1 天
-    editDate() {
-      const base = this.formatDay(new Date())
-      if (this.editDateType !== 'tomorrow') return base
-      const d = new Date(String(base).replace(/-/g, '/'))
-      if (isNaN(d.getTime())) return base
-      d.setDate(d.getDate() + 1)
-      return this.formatDay(d)
-    },
-    // 当前选中的班次对象（取站点接口用的出发时间）
-    editSchedule() {
-      return (
-        this.scheduleList.find(
-          (item) => item.Id === this.editForm.ScheduleId,
-        ) || null
       )
     },
     // 取消退款预计金额：RefundType=false 扣30%=退70%；true 全退
@@ -1129,6 +1102,11 @@ export default {
       if (!row || !row.Id) return
       this.editVisible = true
       this.editLoading = true
+      // 详情返回前先用订单行的出发日期占位（只支持当天/第二天）
+      const rowDay = this.formatDay(
+        row.DepartureTime_DateTime || row.DepartureTime || '',
+      )
+      this.editDate = rowDay === this.dayOffset(1) ? rowDay : this.dayOffset(0)
       if (!this.allSites.length) this.loadAllSites()
       let detail = null
       try {
@@ -1146,8 +1124,6 @@ export default {
       this.editLoading = false
       if (this.editForm.LineId != null) {
         this.loadEditSchedules()
-        // 出发/到达地点下拉：按订单路线拉站点详情
-        this.loadEditSites()
       }
     },
     // 详情/行数据回填编辑表单：优先取原始字段，缺失时按 *_Name 反查下拉选项
@@ -1156,6 +1132,13 @@ export default {
       const src = d || row || {}
       const num = (v) =>
         v === null || v === undefined || v === '' ? 0 : Number(v) || 0
+      // 站点名称：优先接口返回的 *_Name，缺失时按 Id 从全量站点里反查
+      const siteName = (id, name) => {
+        if (name) return name
+        if (id == null) return ''
+        const hit = this.allSites.find((s) => s.Id === id)
+        return hit ? hit.LocationName : ''
+      }
       this.editForm = {
         Id: src.Id || row.Id,
         LineId:
@@ -1198,6 +1181,10 @@ export default {
                 'Id',
                 'LocationName',
               ),
+        StatingLocation_Name: siteName(
+          src.StatingLocation,
+          src.StatingLocation_Name,
+        ),
         EndLocation:
           src.EndLocation != null
             ? src.EndLocation
@@ -1207,20 +1194,21 @@ export default {
                 'Id',
                 'LocationName',
               ),
+        EndLocation_Name: siteName(src.EndLocation, src.EndLocation_Name),
         AdultNum: num(src.AdultNum),
         Children: num(src.Children),
         PersonNum: num(src.PersonNum),
       }
       this.editDeparture = src.DepartureTime_DateTime || src.DepartureTime || ''
-      // 班次/站点默认请求今天的
-      this.editDateType = 'today'
-      // 订单出发日期早于今天：不回显原班次与上下车站，只请求今天的班次
+      // 出发日期只支持当天/第二天：在范围内则同步订单出发日，否则回落今天
+      const today = this.dayOffset(0)
+      const tomorrow = this.dayOffset(1)
       const orderDay = this.formatDay(this.editDeparture)
-      this.editOrderPast = !!orderDay && orderDay < this.formatDay(new Date())
+      this.editOrderPast = !!orderDay && orderDay < today
+      this.editDate = orderDay === tomorrow ? tomorrow : today
       if (this.editOrderPast) {
+        // 出发/到达地点不可改，保持订单原值，只清空需要重新选择的班次
         this.editForm.ScheduleId = null
-        this.editForm.StatingLocation = null
-        this.editForm.EndLocation = null
       }
       // 乘车人：优先详情 Userlist，其次 PersonalIds 字符串（姓名|手机号|身份证）
       const ul = (d && d.Userlist) || []
@@ -1267,7 +1255,7 @@ export default {
         this.allSites = []
       }
     },
-    // 按日期（今天默认 / 明天）拉取所选路线的班次
+    // 按出发日期拉取所选路线的班次
     async loadEditSchedules() {
       if (this.editForm.LineId == null) return
       this.scheduleLoading = true
@@ -1281,12 +1269,21 @@ export default {
           },
         })
         this.scheduleList = data.data || []
-        // 「今天」且详情没回填到 ScheduleId 时，按出发时间兜底匹配（过去的订单不匹配）
+        // 回显的班次不在当天班次列表里：直接清空，避免下拉框显示原始 Id
         if (
-          this.editDateType === 'today' &&
+          this.editForm.ScheduleId != null &&
+          !this.scheduleList.some(
+            (item) => String(item.Id) === String(this.editForm.ScheduleId),
+          )
+        ) {
+          this.editForm.ScheduleId = null
+        }
+        // 出发日期与订单一致且详情没回填到 ScheduleId 时，按出发时间兜底匹配
+        if (
           !this.editOrderPast &&
           this.editForm.ScheduleId == null &&
-          this.editDeparture
+          this.editDeparture &&
+          this.editDate === this.formatDay(this.editDeparture)
         ) {
           const hit = this.scheduleList.find(
             (item) =>
@@ -1294,79 +1291,44 @@ export default {
           )
           if (hit) {
             this.editForm.ScheduleId = hit.Id
-            // 兜底匹配到班次后，用班次 Id 拉出发地/目的地
-            this.loadEditSites()
           }
         }
       } catch (e) {
         this.scheduleList = []
+        // 班次列表拿不到时同样清空，避免下拉框显示原始 Id
+        this.editForm.ScheduleId = null
       } finally {
         this.scheduleLoading = false
       }
     },
-    // 切换今天/明天：清空已选班次与出发地/目的地，只请求所选日期的班次
-    onEditDateTypeChange() {
+    // 切换出发日期：清空已选班次，重新请求该日期的班次
+    onEditDateChange() {
       this.editForm.ScheduleId = null
-      this.editForm.StatingLocation = null
-      this.editForm.EndLocation = null
-      this.editBoardSites = []
-      this.editAlightSites = []
+      this.scheduleList = []
       this.loadEditSchedules()
     },
-    // 选中班次后：拿班次 Id 请求该班次当天的出发地/目的地列表
-    onEditScheduleChange() {
-      this.editForm.StatingLocation = null
-      this.editForm.EndLocation = null
-      this.loadEditSites()
-    },
-    // 编辑弹窗换路线：清空班次与已选站点并重新拉取
+    // 编辑弹窗换路线：清空班次并重新拉取
     onEditLineChange() {
       this.editForm.ScheduleId = null
       this.scheduleList = []
-      // 路线变了，站点集合也变了，清掉已选上下车站
-      this.editForm.StatingLocation = null
-      this.editForm.EndLocation = null
-      this.editBoardSites = []
-      this.editAlightSites = []
       this.loadEditSchedules()
     },
-    // 出发/到达地点下拉：POST /api/BusMobile/GetBusLineSiteTimeInfo（巴士路线站点详情）
-    // 返回 StartSiteList = 出发地点，EndSiteList = 到达地点；按所选班次 Id 请求
-    async loadEditSites() {
-      if (this.editForm.LineId == null || this.editForm.ScheduleId == null) {
-        this.editBoardSites = []
-        this.editAlightSites = []
-        return
-      }
-      this.editSiteLoading = true
-      try {
-        const res = await request({
-          url: '/api/BusMobile/GetBusLineSiteTimeInfo',
-          method: 'post',
-          data: {
-            ScheduleId: this.editForm.ScheduleId,
-            LineId: this.editForm.LineId,
-            DepartureTime:
-              (this.editSchedule && this.editSchedule.DepartureTime) ||
-              this.editDate + ' 00:00:00',
-          },
-        })
-        const d = res.data || {}
-        console.log('loadEditSites', d)
-        this.editBoardSites = d.StartSiteList || []
-        this.editAlightSites = d.EndSiteList || []
-      } catch (e) {
-        this.editBoardSites = []
-        this.editAlightSites = []
-      } finally {
-        this.editSiteLoading = false
-      }
-    },
+    // 出发/到达地点为只读展示，不再提供下拉选择
     // 取 yyyy-MM-dd（用于按日期查询班次），复用 formatDate 的多格式兼容
     formatDay(val) {
       if (val === null || val === undefined || val === '') return ''
       const s = this.formatDate(val)
       return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : ''
+    },
+    // 相对今天偏移 n 天的 yyyy-MM-dd（0=今天，1=明天）
+    dayOffset(n) {
+      const d = new Date()
+      d.setHours(0, 0, 0, 0)
+      d.setDate(d.getDate() + (Number(n) || 0))
+      const pad = (m) => (m < 10 ? '0' + m : '' + m)
+      return (
+        d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+      )
     },
     addEditPassenger() {
       this.editPassengers.push({ Name: '', Phone: '', IdCard: '' })
@@ -1392,7 +1354,9 @@ export default {
         Remark: '',
         OrderStatus: 0,
         StatingLocation: null,
+        StatingLocation_Name: '',
         EndLocation: null,
+        EndLocation_Name: '',
         AdultNum: 0,
         Children: 0,
         PersonNum: 0,
@@ -1400,10 +1364,8 @@ export default {
       this.editPassengers = [{ Name: '', Phone: '', IdCard: '' }]
       this.editDeparture = ''
       this.editOrderPast = false
-      this.editDateType = 'today'
+      this.editDate = this.dayOffset(0)
       this.scheduleList = []
-      this.editBoardSites = []
-      this.editAlightSites = []
     },
     // 保存修改：POST /BusOrder/UpdateBusOrderInfo
     async submitEdit() {
@@ -1417,7 +1379,8 @@ export default {
         return
       }
       if (f.StatingLocation == null || f.EndLocation == null) {
-        this.$message.warning('请选择出发/到达地点')
+        // 站点不可修改，缺失说明订单数据不全，无法提交
+        this.$message.warning('订单缺少出发/到达地点数据，无法修改')
         return
       }
       if (!/^1\d{10}$/.test(String(f.PassengerPhone || '').trim())) {
@@ -1709,10 +1672,20 @@ export default {
 .full {
   width: 100%;
 }
-.edit-day-tip {
-  margin-left: 8px;
-  font-size: 12px;
-  color: #909399;
+/* 只读展示字段（出发/到达地点等不可修改项） */
+.edit-static {
+  min-height: 28px;
+  line-height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: #606266;
+  background: #f5f7fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pax-add {
   margin-left: 10px;

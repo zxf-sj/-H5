@@ -11,7 +11,9 @@
       <el-form :inline="true" size="mini" class="filter-bar">
         <el-form-item label="路线">
           <el-select
-            v-model="lineId"
+            v-model="lineIds"
+            multiple
+            collapse-tags
             filterable
             clearable
             placeholder="全部路线"
@@ -38,22 +40,77 @@
             @change="loadList"
           />
         </el-form-item>
+        <el-form-item label="司机">
+          <el-select
+            v-model="driverIds"
+            multiple
+            collapse-tags
+            filterable
+            clearable
+            placeholder="全部司机"
+            class="filter"
+            :loading="dictLoading"
+            @change="loadList"
+          >
+            <el-option
+              v-for="item in driverList"
+              :key="item.Id"
+              :label="item.Name || item.DriverName"
+              :value="item.Id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="车辆">
+          <el-select
+            v-model="carIds"
+            multiple
+            collapse-tags
+            filterable
+            clearable
+            placeholder="全部车辆"
+            class="filter"
+            :loading="dictLoading"
+            @change="loadList"
+          >
+            <el-option
+              v-for="item in carList"
+              :key="item.Id"
+              :label="item.VehicleNo || item.CarNo || item.Name"
+              :value="item.Id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" icon="el-icon-search" @click="loadList"
             >查询</el-button
           >
-          <el-button icon="el-icon-refresh" @click="loadList">刷新</el-button>
+          <el-button icon="el-icon-close" @click="clearFilters">清除</el-button>
+          <el-button
+            type="warning"
+            icon="el-icon-user"
+            :disabled="!selectedRows.length"
+            @click="openChangeDriver"
+            >班次换司机{{
+              selectedRows.length ? '（' + selectedRows.length + '）' : ''
+            }}</el-button
+          >
+          <el-button type="danger" icon="el-icon-sort" @click="openSwap"
+            >司机对调</el-button
+          >
         </el-form-item>
       </el-form>
 
       <el-table
+        ref="opTable"
         v-loading="listLoading"
         :data="list"
         border
         size="mini"
         style="width: 100%"
         empty-text="暂无运营班次"
+        @selection-change="onSelectionChange"
       >
+        <el-table-column type="selection" width="46" align="center" />
         <el-table-column prop="Id" label="ID" width="80" align="center" />
         <el-table-column label="发车时间" width="200" align="center">
           <template slot-scope="scope">
@@ -94,12 +151,14 @@
             }}
           </template>
         </el-table-column>
-        <el-table-column label="司机" min-width="120" align="center">
+        <el-table-column label="原始司机" min-width="120" align="center">
           <template slot-scope="scope">
-            {{
-              pick(scope.row, ['DriverId_Name', 'Driver_Name', 'DriverName']) ||
-              '-'
-            }}
+            {{ pick(scope.row, ['PlanDriver_Name']) || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="实际司机" min-width="120" align="center">
+          <template slot-scope="scope">
+            {{ pick(scope.row, ['Driver_Name']) || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="上车人数" width="80" align="center">
@@ -147,7 +206,189 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="pager-bar">
+        <el-pagination
+          background
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="total"
+          :page-size="pageSize"
+          :current-page="pageIndex"
+          :page-sizes="[10, 20, 50]"
+          @current-change="handlePageChange"
+          @size-change="handleSizeChange"
+        />
+      </div>
     </div>
+
+    <!-- 班次换司机弹窗 -->
+    <el-dialog
+      title="班次换司机"
+      :visible.sync="driverDialogVisible"
+      width="420px"
+      :close-on-click-modal="false"
+    >
+      <div class="change-driver-tip">
+        已选 <b>{{ selectedRows.length }}</b> 个班次，将把它们的司机统一换成：
+      </div>
+      <el-select
+        v-model="changeDriverId"
+        filterable
+        placeholder="请选择司机"
+        class="change-driver-select"
+        :loading="dictLoading"
+      >
+        <el-option
+          v-for="item in driverList"
+          :key="item.Id"
+          :label="item.Name || item.DriverName"
+          :value="item.Id"
+        />
+      </el-select>
+      <span slot="footer">
+        <el-button size="mini" @click="driverDialogVisible = false"
+          >取消</el-button
+        >
+        <el-button
+          type="primary"
+          size="mini"
+          :loading="driverDialogSaving"
+          @click="submitChangeDriver"
+          >确定</el-button
+        >
+      </span>
+    </el-dialog>
+
+    <!-- 司机班次对调弹窗 -->
+    <el-dialog
+      title="司机班次对调"
+      :visible.sync="swapVisible"
+      width="980px"
+      top="6vh"
+      :close-on-click-modal="false"
+    >
+      <div class="swap-tip">
+        日期：{{ today }} ——
+        左右各自选择司机与班次，点击“确认对调”后两边的司机互换
+      </div>
+      <div class="swap-body">
+        <div class="swap-col">
+          <el-select
+            v-model="swapLeftDriverId"
+            filterable
+            clearable
+            placeholder="左侧司机（可输入筛选）"
+            class="swap-driver"
+            :loading="dictLoading"
+            @change="loadSwapSide('left')"
+          >
+            <el-option
+              v-for="item in driverList"
+              :key="item.Id"
+              :label="item.Name || item.DriverName"
+              :value="item.Id"
+            />
+          </el-select>
+          <el-table
+            v-loading="swapLeftLoading"
+            :data="swapLeftList"
+            border
+            size="mini"
+            height="300"
+            empty-text="该司机当天暂无班次"
+            @selection-change="onSwapLeftSelect"
+          >
+            <el-table-column type="selection" width="42" align="center" />
+            <el-table-column label="发车时间" width="170" align="center">
+              <template slot-scope="scope">
+                {{
+                  pick(scope.row, [
+                    'DepartureTime',
+                    'StartTime',
+                    'DepartureTime_DateTime',
+                  ]) || '-'
+                }}
+              </template>
+            </el-table-column>
+            <el-table-column label="路线" min-width="120">
+              <template slot-scope="scope">
+                {{
+                  pick(scope.row, ['LineId_Name', 'Line_Name', 'LineName']) ||
+                  '-'
+                }}
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="swap-count">
+            左侧已选 {{ swapLeftRows.length }} 个班次
+          </div>
+        </div>
+
+        <div class="swap-arrow">⇄</div>
+
+        <div class="swap-col">
+          <el-select
+            v-model="swapRightDriverId"
+            filterable
+            clearable
+            placeholder="右侧司机（可输入筛选）"
+            class="swap-driver"
+            :loading="dictLoading"
+            @change="loadSwapSide('right')"
+          >
+            <el-option
+              v-for="item in driverList"
+              :key="'r-' + item.Id"
+              :label="item.Name || item.DriverName"
+              :value="item.Id"
+            />
+          </el-select>
+          <el-table
+            v-loading="swapRightLoading"
+            :data="swapRightList"
+            border
+            size="mini"
+            height="300"
+            empty-text="该司机当天暂无班次"
+            @selection-change="onSwapRightSelect"
+          >
+            <el-table-column type="selection" width="42" align="center" />
+            <el-table-column label="发车时间" width="170" align="center">
+              <template slot-scope="scope">
+                {{
+                  pick(scope.row, [
+                    'DepartureTime',
+                    'StartTime',
+                    'DepartureTime_DateTime',
+                  ]) || '-'
+                }}
+              </template>
+            </el-table-column>
+            <el-table-column label="路线" min-width="120">
+              <template slot-scope="scope">
+                {{
+                  pick(scope.row, ['LineId_Name', 'Line_Name', 'LineName']) ||
+                  '-'
+                }}
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="swap-count">
+            右侧已选 {{ swapRightRows.length }} 个班次
+          </div>
+        </div>
+      </div>
+      <span slot="footer">
+        <el-button size="mini" @click="swapVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          size="mini"
+          :loading="swapSaving"
+          @click="submitSwap"
+          >确认对调</el-button
+        >
+      </span>
+    </el-dialog>
 
     <!-- 运营详情弹窗 -->
     <el-dialog
@@ -259,18 +500,38 @@
           </el-select>
         </el-form-item>
         <el-form-item label="司机" prop="DriverId">
-          <el-input
+          <el-select
             v-model="editForm.DriverId"
-            placeholder="司机标识，如：300038-8831C83B8D2A40E48BE904AC0E944709"
-          />
+            filterable
+            clearable
+            placeholder="选择司机"
+            class="full"
+            :loading="dictLoading"
+          >
+            <el-option
+              v-for="item in driverList"
+              :key="item.Id"
+              :label="item.Name || item.DriverName"
+              :value="item.Id"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="车辆" prop="VehicleId">
-          <el-input-number
+          <el-select
             v-model="editForm.VehicleId"
-            :min="0"
-            :controls="false"
+            filterable
+            clearable
+            placeholder="选择车辆"
             class="full"
-          />
+            :loading="dictLoading"
+          >
+            <el-option
+              v-for="item in carList"
+              :key="item.Id"
+              :label="item.VehicleNo || item.CarNo || item.Name"
+              :value="item.Id"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="班次日期" prop="ScheduleDate">
           <el-date-picker
@@ -393,7 +654,12 @@ export default {
     return {
       lineList: [],
       lineLoading: false,
-      lineId: 1,
+      lineIds: [],
+      driverIds: [],
+      carIds: [],
+      driverList: [],
+      carList: [],
+      dictLoading: false,
       today:
         now.getFullYear() +
         '-' +
@@ -402,8 +668,29 @@ export default {
         pad(now.getDate()),
 
       list: [],
+      // 分页：接口返回当天全量，前端切片
+      allList: [],
+      total: 0,
+      pageIndex: 1,
+      pageSize: 10,
       listLoading: false,
       switchingId: null,
+      // —— 勾选 + 班次换司机 ——
+      selectedRows: [],
+      driverDialogVisible: false,
+      driverDialogSaving: false,
+      changeDriverId: null,
+      // —— 司机对调 ——
+      swapVisible: false,
+      swapSaving: false,
+      swapLeftDriverId: null,
+      swapRightDriverId: null,
+      swapLeftList: [],
+      swapRightList: [],
+      swapLeftRows: [],
+      swapRightRows: [],
+      swapLeftLoading: false,
+      swapRightLoading: false,
       // —— 详情 ——
       detailVisible: false,
       detailLoading: false,
@@ -414,11 +701,9 @@ export default {
       editSaving: false,
       editForm: {},
       editRules: {
-        LineId: [
-          { required: true, message: '请选择线路', trigger: 'change' },
-        ],
+        LineId: [{ required: true, message: '请选择线路', trigger: 'change' }],
         DriverId: [
-          { required: true, message: '请填写司机标识', trigger: 'blur' },
+          { required: true, message: '请选择司机', trigger: 'change' },
         ],
         ScheduleDate: [
           { required: true, message: '请选择班次日期', trigger: 'change' },
@@ -442,6 +727,7 @@ export default {
   },
   mounted() {
     this.loadLines()
+    this.loadDicts()
     this.loadList()
   },
   methods: {
@@ -483,30 +769,100 @@ export default {
         this.lineLoading = false
       }
     },
-    // 运营时刻列表：GET /BusOrder/GetBusLineOperationsList?lineId=&today=
+    // 司机 / 车辆字典：GetBusDriverList + GetBusCarList
+    async loadDicts() {
+      this.dictLoading = true
+      try {
+        const [driverRes, carRes] = await Promise.all([
+          request({
+            url: '/BusOrder/GetBusDriverList',
+            method: 'post',
+            data: {},
+            silent: true,
+          }).catch(() => null),
+          request({
+            url: '/BusOrder/GetBusCarList',
+            method: 'post',
+            data: {},
+            silent: true,
+          }).catch(() => null),
+        ])
+        const toList = (res) => {
+          if (!res) return []
+          const d = res.data
+          if (!d) return []
+          if (Array.isArray(d)) return d
+          if (Array.isArray(d.data)) return d.data
+          if (Array.isArray(d.List)) return d.List
+          return []
+        }
+        this.driverList = toList(driverRes)
+        this.carList = toList(carRes)
+      } finally {
+        this.dictLoading = false
+      }
+    },
+    // 清除路线 / 司机 / 车辆筛选，日期保留
+    clearFilters() {
+      this.lineIds = []
+      this.driverIds = []
+      this.carIds = []
+      this.loadList()
+    },
+    // 运营时刻列表：GET /BusOrder/GetBusLineOperationsList?lineId=&today=&driverId=&carId=
     async loadList() {
       this.listLoading = true
+      this.selectedRows = []
+      if (this.$refs.opTable) this.$refs.opTable.clearSelection()
       try {
         const params = { today: this.today }
-        if (this.lineId != null) params.lineId = this.lineId
+        if (this.lineIds && this.lineIds.length)
+          params.lineId = this.lineIds.join(',')
+        if (this.driverIds && this.driverIds.length)
+          params.driverId = this.driverIds.join(',')
+        if (this.carIds && this.carIds.length)
+          params.carId = this.carIds.join(',')
         const res = await request({
           url: '/BusOrder/GetBusLineOperationsList',
           method: 'get',
           params,
         })
         const d = res.data
-        this.list = Array.isArray(d)
+        const rows = Array.isArray(d)
           ? d
           : d && Array.isArray(d.data)
           ? d.data
           : d && Array.isArray(d.List)
           ? d.List
           : []
+        this.allList = rows
+        this.total = rows.length
+        this.pageIndex = 1
+        this.applyPage()
       } catch (e) {
-        this.list = []
+        this.allList = []
+        this.total = 0
+        this.pageIndex = 1
+        this.applyPage()
       } finally {
         this.listLoading = false
       }
+    },
+    // 前端分页：按 pageIndex/pageSize 切片
+    applyPage() {
+      const start = (this.pageIndex - 1) * this.pageSize
+      this.list = this.allList.slice(start, start + this.pageSize)
+      this.selectedRows = []
+      if (this.$refs.opTable) this.$refs.opTable.clearSelection()
+    },
+    handlePageChange(page) {
+      this.pageIndex = page
+      this.applyPage()
+    },
+    handleSizeChange(size) {
+      this.pageSize = size
+      this.pageIndex = 1
+      this.applyPage()
     },
     // 售卖开关：GET /BusOrder/UpdateLineOpenState?Id=&IsSale=
     async handleSwitchSale(row, val) {
@@ -616,6 +972,145 @@ export default {
       this.detailRow = null
       this.detailLoading = false
     },
+    // ==================== 勾选 + 班次换司机 ====================
+    onSelectionChange(rows) {
+      this.selectedRows = rows || []
+    },
+    openChangeDriver() {
+      if (!this.selectedRows.length) {
+        Message.warning('请先勾选要换司机的班次')
+        return
+      }
+      this.changeDriverId = null
+      this.driverDialogVisible = true
+    },
+    // POST /BusOrder/UpdateDriver  { Ids: [...], DriverId }
+    async submitChangeDriver() {
+      if (!this.changeDriverId) {
+        Message.warning('请选择司机')
+        return
+      }
+      this.driverDialogSaving = true
+      try {
+        await request({
+          url: '/BusOrder/UpdateDriver',
+          method: 'post',
+          data: {
+            Ids: this.selectedRows.map((r) => r.Id),
+            DriverId: this.changeDriverId,
+          },
+        })
+        Message.success('换司机成功')
+        this.driverDialogVisible = false
+        this.selectedRows = []
+        if (this.$refs.opTable) this.$refs.opTable.clearSelection()
+        this.loadList()
+      } catch (e) {
+        // 错误提示由 request 拦截器统一弹出
+      } finally {
+        this.driverDialogSaving = false
+      }
+    },
+    // ==================== 司机班次对调 ====================
+    onSwapLeftSelect(rows) {
+      this.swapLeftRows = rows || []
+    },
+    onSwapRightSelect(rows) {
+      this.swapRightRows = rows || []
+    },
+    openSwap() {
+      this.swapLeftDriverId = null
+      this.swapRightDriverId = null
+      this.swapLeftList = []
+      this.swapRightList = []
+      this.swapLeftRows = []
+      this.swapRightRows = []
+      this.swapVisible = true
+    },
+    // 按司机拉取当天班次（复用运营时刻列表接口）
+    async loadSwapSide(side) {
+      const isLeft = side === 'left'
+      const driverId = isLeft ? this.swapLeftDriverId : this.swapRightDriverId
+      const listKey = isLeft ? 'swapLeftList' : 'swapRightList'
+      const rowsKey = isLeft ? 'swapLeftRows' : 'swapRightRows'
+      const loadingKey = isLeft ? 'swapLeftLoading' : 'swapRightLoading'
+      this[rowsKey] = []
+      this[listKey] = []
+      if (driverId == null || driverId === '') return
+      this[loadingKey] = true
+      try {
+        const params = { today: this.today, driverId }
+        if (this.lineIds && this.lineIds.length)
+          params.lineId = this.lineIds.join(',')
+        const res = await request({
+          url: '/BusOrder/GetBusLineOperationsList',
+          method: 'get',
+          params,
+          silent: true,
+        })
+        const d = res.data
+        this[listKey] = Array.isArray(d)
+          ? d
+          : d && Array.isArray(d.data)
+          ? d.data
+          : d && Array.isArray(d.List)
+          ? d.List
+          : []
+      } catch (e) {
+        this[listKey] = []
+      } finally {
+        this[loadingKey] = false
+      }
+    },
+    // POST /BusOrder/UpdateDriverSwap { Ids, DriverId, ActualDriverId }
+    async submitSwap() {
+      const left = this.swapLeftRows || []
+      const right = this.swapRightRows || []
+      if (!this.swapLeftDriverId || !this.swapRightDriverId) {
+        Message.warning('左右两侧都要选择司机')
+        return
+      }
+      if (this.swapLeftDriverId === this.swapRightDriverId) {
+        Message.warning('左右不能选择同一个司机')
+        return
+      }
+      if (!left.length || !right.length) {
+        Message.warning('左右两侧都要勾选要对调的班次')
+        return
+      }
+      try {
+        await this.$confirm(
+          `确认将左侧 ${left.length} 个班次与右侧 ${right.length} 个班次的司机对调吗？`,
+          '确认对调',
+          {
+            type: 'warning',
+            confirmButtonText: '确认对调',
+            cancelButtonText: '取消',
+          },
+        )
+      } catch (e) {
+        return
+      }
+      this.swapSaving = true
+      try {
+        await request({
+          url: '/BusOrder/UpdateDriverSwap',
+          method: 'post',
+          data: {
+            Ids: left.concat(right).map((r) => r.Id),
+            DriverId: this.swapLeftDriverId,
+            ActualDriverId: this.swapRightDriverId,
+          },
+        })
+        Message.success('司机对调成功')
+        this.swapVisible = false
+        this.loadList()
+      } catch (e) {
+        // 错误提示由 request 拦截器统一弹出
+      } finally {
+        this.swapSaving = false
+      }
+    },
   },
 }
 </script>
@@ -654,6 +1149,61 @@ export default {
   }
   .date-filter {
     width: 150px;
+  }
+  .filter {
+    width: 180px;
+  }
+
+  .change-driver-tip {
+    margin-bottom: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #606266;
+
+    b {
+      color: #e6a23c;
+    }
+  }
+  .change-driver-select {
+    width: 100%;
+  }
+
+  .pager-bar {
+    margin-top: 12px;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  /* 司机对调 */
+  .swap-tip {
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: #909399;
+  }
+  .swap-body {
+    display: flex;
+    align-items: stretch;
+  }
+  .swap-col {
+    flex: 1;
+    min-width: 0;
+  }
+  .swap-driver {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+  .swap-arrow {
+    flex: 0 0 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #e6a23c;
+  }
+  .swap-count {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #606266;
   }
 
   .detail-body {

@@ -1,5 +1,7 @@
 <template>
   <div class="bus-order">
+    <div class="flow-layout">
+      <div class="flow-main">
     <!-- ==================== 路线 + 日期 ==================== -->
     <div class="panel">
       <div class="panel__head">
@@ -316,6 +318,70 @@
       </div>
     </div>
 
+      </div>
+
+      <!-- ==================== 右侧：站点地图 ==================== -->
+      <div class="flow-map">
+        <div class="panel site-map-panel">
+          <div class="panel__head">
+            <span class="panel__title"
+              >站点地图（共 {{ siteMapSites.length }} 个）</span
+            >
+          </div>
+          <div class="site-map-tools">
+            <el-input
+              v-model="placeKeyword"
+              size="mini"
+              placeholder="搜索地点 / 地址，回车检索"
+              clearable
+              @keyup.enter.native="searchPlace"
+              @clear="placeResults = []"
+            />
+            <el-button
+              type="primary"
+              size="mini"
+              :loading="placeSearching"
+              @click="searchPlace"
+              >搜索</el-button
+            >
+          </div>
+          <el-select
+            v-model="siteMapPick"
+            filterable
+            clearable
+            size="mini"
+            placeholder="输入站点名称定位"
+            class="site-map-search"
+            @change="locateSiteOnMap"
+          >
+            <el-option
+              v-for="s in siteMapSites"
+              :key="s.Id"
+              :label="s.LocationName"
+              :value="s.Id"
+            />
+          </el-select>
+          <div class="site-map-wrap">
+            <div v-if="placeResults.length" class="site-map-results">
+              <div
+                v-for="(p, i) in placeResults"
+                :key="i"
+                class="site-map-result"
+                @click="selectPlaceResult(p)"
+              >
+                <div class="site-map-result__title">{{ p.title }}</div>
+                <div class="site-map-result__addr">{{ p.address }}</div>
+              </div>
+            </div>
+            <div ref="siteMapBox" class="site-map-box"></div>
+            <div v-if="!siteMapReady" class="site-map-mask">
+              {{ siteMapError || '地图加载中...' }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ==================== 下单信息确认预览 ==================== -->
     <el-dialog
       title="确认订单信息"
@@ -395,6 +461,7 @@
 <script>
 import { Message } from 'element-ui'
 import request from '@/utils/request'
+import loadBMapGL from '@/utils/bmap'
 import {
   adultPriceOf as adultPrice,
   childPriceOf as childPrice,
@@ -490,6 +557,15 @@ export default {
       remark: '',
       submitting: false,
       confirmVisible: false, // 下单确认预览框
+      // —— 右侧站点地图 ——
+      siteMapSites: [], // 全部站点（/BusOrder/GetSearchBusLocation）
+      siteMapPick: null, // 下拉选中的站点 Id
+      siteMapReady: false,
+      siteMapError: '',
+      // 地图地点检索
+      placeKeyword: '',
+      placeResults: [],
+      placeSearching: false,
     }
   },
   computed: {
@@ -551,10 +627,190 @@ export default {
   created() {
     this.loadRoutes()
   },
+  mounted() {
+    this.$nextTick(this.initSiteMap)
+  },
+  beforeDestroy() {
+    clearTimeout(this.placeTimer)
+    this.localSearch = null
+    this.siteMap = null
+    this.siteMarkers = []
+    this.BMapGL = null
+  },
   methods: {
     money(val) {
       const num = Number(val)
       return Number.isFinite(num) ? num.toFixed(2) : '0.00'
+    },
+    // ==================== 右侧站点地图 ====================
+    async initSiteMap() {
+      if (this.siteMap) return
+      try {
+        const BMapGL = await loadBMapGL()
+        this.BMapGL = BMapGL
+        if (!this.$refs.siteMapBox) return
+        const map = new BMapGL.Map(this.$refs.siteMapBox, {
+          minZoom: 5,
+          maxZoom: 19,
+        })
+        map.centerAndZoom(new BMapGL.Point(112.562209, 37.79319), 12)
+        map.enableScrollWheelZoom(true)
+        map.addControl(new BMapGL.NavigationControl())
+        map.addControl(new BMapGL.ScaleControl())
+        this.siteMap = map
+        this.siteMarkers = []
+        this.siteMapReady = true
+        // 地点检索：结果自己渲染成下拉面板，不用地图自带检索面板
+        this.localSearch = new BMapGL.LocalSearch(map, {
+          pageCapacity: 10,
+          onSearchComplete: (results) =>
+            this.handlePlaceSearchComplete(results),
+        })
+        await this.loadSiteMapSites()
+      } catch (e) {
+        this.siteMapError = e.message || '地图加载失败'
+      }
+    },
+    // 全部站点：POST /BusOrder/GetSearchBusLocation
+    async loadSiteMapSites() {
+      try {
+        const res = await request({
+          url: '/BusOrder/GetSearchBusLocation',
+          method: 'post',
+          data: {},
+          noDuplicate: true,
+        })
+        this.siteMapSites = toArray(res.data).filter(
+          (s) => s && Number(s.Longitude) && Number(s.Latitude),
+        )
+      } catch (e) {
+        this.siteMapSites = []
+      }
+      this.drawSiteMapMarkers()
+    },
+    // 标注全部站点
+    drawSiteMapMarkers() {
+      const BMapGL = this.BMapGL
+      const map = this.siteMap
+      if (!map || !BMapGL) return
+      map.clearOverlays()
+      this.siteMarkers = []
+      this.siteMapSites.forEach((s) => {
+        const point = new BMapGL.Point(
+          Number(s.Longitude),
+          Number(s.Latitude),
+        )
+        const marker = new BMapGL.Marker(point)
+        marker.addEventListener('click', () => this.openSiteInfo(s, point))
+        this.siteMarkers.push(marker)
+        map.addOverlay(marker)
+      })
+      if (this.siteMarkers.length > 1) {
+        map.setViewport(this.siteMarkers.map((m) => m.getPosition()))
+      }
+    },
+    // 站点气泡
+    openSiteInfo(site, point) {
+      const BMapGL = this.BMapGL
+      if (!BMapGL || !this.siteMap) return
+      const info = new BMapGL.InfoWindow(
+        '<div style="padding:6px 8px;font-size:13px;line-height:1.6;">' +
+          '<div style="font-weight:700;">' +
+          (site.LocationName || '') +
+          '</div>' +
+          (site.DetailAddress
+            ? '<div style="color:#909399;font-size:12px;">' +
+              site.DetailAddress +
+              '</div>'
+            : '') +
+          '</div>',
+      )
+      this.siteMap.openInfoWindow(info, point)
+      this.siteMap.centerAndZoom(point, 16)
+    },
+    // 下拉按名称定位站点
+    locateSiteOnMap(id) {
+      if (id == null || id === '') {
+        if (this.siteMarkers && this.siteMarkers.length > 1) {
+          this.siteMap.setViewport(this.siteMarkers.map((m) => m.getPosition()))
+        }
+        return
+      }
+      const site = this.siteMapSites.find((s) => s.Id === id)
+      if (!site || !this.BMapGL || !this.siteMap) return
+      this.openSiteInfo(
+        site,
+        new this.BMapGL.Point(Number(site.Longitude), Number(site.Latitude)),
+      )
+    },
+    // ==================== 地图地点检索 ====================
+    searchPlace() {
+      const keyword = (this.placeKeyword || '').trim()
+      if (!keyword) {
+        Message.warning('请输入要搜索的地点')
+        return
+      }
+      if (!this.localSearch) {
+        Message.warning('地图还没准备好，请稍候再试')
+        return
+      }
+      this.placeSearching = true
+      this.placeResults = []
+      clearTimeout(this.placeTimer)
+      // 兜底：个别关键词不回调时 10 秒解除 loading
+      this.placeTimer = setTimeout(() => {
+        this.placeSearching = false
+      }, 10000)
+      this.localSearch.search(keyword)
+    },
+    handlePlaceSearchComplete(results) {
+      clearTimeout(this.placeTimer)
+      this.placeSearching = false
+      // 多关键词时返回数组，只取第一组
+      const result = Array.isArray(results) ? results[0] : results
+      if (!result || !result.getCurrentNumPois) {
+        this.placeResults = []
+        return
+      }
+      const total = result.getCurrentNumPois()
+      if (!total) {
+        this.placeResults = []
+        Message.warning('没有找到相关地点，换个关键词试试')
+        return
+      }
+      const list = []
+      for (let i = 0; i < total; i++) {
+        const poi = result.getPoi(i)
+        if (!poi || !poi.point) continue
+        list.push({
+          title: poi.title || poi.address || '未命名地点',
+          address: poi.address || '',
+          longitude: poi.point.lng,
+          latitude: poi.point.lat,
+        })
+      }
+      this.placeResults = list
+    },
+    // 点击检索结果：地图跳过去并弹出气泡
+    selectPlaceResult(item) {
+      this.placeResults = []
+      this.placeKeyword = item.title
+      if (!this.siteMap || !this.BMapGL) return
+      const point = new this.BMapGL.Point(item.longitude, item.latitude)
+      this.siteMap.centerAndZoom(point, 17)
+      const info = new this.BMapGL.InfoWindow(
+        '<div style="padding:6px 8px;font-size:13px;line-height:1.6;">' +
+          '<div style="font-weight:700;">' +
+          item.title +
+          '</div>' +
+          (item.address
+            ? '<div style="color:#909399;font-size:12px;">' +
+              item.address +
+              '</div>'
+            : '') +
+          '</div>',
+      )
+      this.siteMap.openInfoWindow(info, point)
     },
     canBuy(item) {
       return item && Number(item.EmptySeat) > 0
@@ -873,6 +1129,124 @@ export default {
 
   .line-select {
     width: 200px;
+  }
+
+  /* 两列布局：左侧下单流程，右侧常驻站点地图 */
+  .flow-layout {
+    display: flex;
+    align-items: flex-start;
+  }
+  .flow-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .flow-map {
+    flex: 0 0 50%;
+    width: 50%;
+    max-width: 900px;
+    margin-left: 12px;
+    position: sticky;
+    top: 12px;
+
+    .site-map-panel {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 0;
+    }
+    .site-map-search {
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    .site-map-tools {
+      display: flex;
+      margin-bottom: 8px;
+
+      .el-input {
+        flex: 1;
+      }
+      .el-button {
+        margin-left: 8px;
+        flex: 0 0 auto;
+      }
+    }
+  }
+  /* 地点检索结果下拉（覆盖在地图上方） */
+  .site-map-results {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    left: 8px;
+    z-index: 30;
+    max-height: 260px;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  }
+  .site-map-result {
+    padding: 8px 10px;
+    border-bottom: 1px solid #f2f6fc;
+    cursor: pointer;
+
+    &:last-child {
+      border-bottom: none;
+    }
+    &:hover {
+      background: #f5f7fa;
+    }
+
+    &__title {
+      font-size: 13px;
+      line-height: 1.5;
+      color: #303133;
+    }
+    &__addr {
+      font-size: 12px;
+      line-height: 1.5;
+      color: #909399;
+    }
+  }
+  .site-map-wrap {
+    position: relative;
+    height: calc(100vh - 220px);
+    min-height: 480px;
+  }
+  .site-map-box {
+    width: 100%;
+    height: 100%;
+    border: 1px solid #ebeef5;
+    border-radius: $radius;
+    overflow: hidden;
+  }
+  .site-map-mask {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fafafa;
+    border-radius: $radius;
+    font-size: 13px;
+    color: #909399;
+  }
+  @media (max-width: 1200px) {
+    .flow-layout {
+      flex-direction: column;
+    }
+    .flow-map {
+      flex: none;
+      width: 100%;
+      margin: 0 0 12px;
+      position: static;
+
+      .site-map-wrap {
+        height: 420px;
+        min-height: 420px;
+      }
+    }
   }
 
   // 热门站点按钮行（位于路线/线路/日期筛选行下方）

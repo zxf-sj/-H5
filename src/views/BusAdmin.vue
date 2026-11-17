@@ -3,9 +3,9 @@
     <el-tabs v-model="activeTab" @tab-click="handleTabClick">
       <!-- ==================== 站点管理 ==================== -->
       <el-tab-pane label="站点管理" name="site">
-        <el-row :gutter="12">
+        <el-row :gutter="12" type="flex" class="site-row">
           <el-col :xs="24" :md="14">
-            <div class="panel">
+            <div class="panel site-map-panel">
               <div class="panel__head">
                 <span class="panel__title">地图选点</span>
                 <span class="panel__tip"
@@ -59,10 +59,10 @@
             </div>
           </el-col>
           <el-col :xs="24" :md="10">
-            <div class="panel">
+            <div class="panel site-form-panel">
               <div class="panel__head">
                 <span class="panel__title">{{
-                  siteForm.Id ? '编辑站点 #' + siteForm.Id : '新增站点'
+                  siteForm.Id ? '编辑站点' : '新增站点'
                 }}</span>
                 <span class="panel__tip">带 * 为必填</span>
               </div>
@@ -70,7 +70,7 @@
                 ref="siteForm"
                 :model="siteForm"
                 :rules="siteRules"
-                label-width="86px"
+                label-width="96px"
                 size="mini"
               >
                 <el-form-item label="站点名称" prop="LocationName">
@@ -80,6 +80,23 @@
                     clearable
                   />
                 </el-form-item>
+                <el-form-item label="区域权限" prop="LocationRole">
+                  <el-select
+                    v-model="siteForm.LocationRole"
+                    filterable
+                    clearable
+                    placeholder="选择区域权限"
+                    class="full"
+                    :loading="locationRoleLoading"
+                  >
+                    <el-option
+                      v-for="item in locationRoleList"
+                      :key="item.Value"
+                      :label="item.Text"
+                      :value="item.Value"
+                    />
+                  </el-select>
+                </el-form-item>
                 <el-form-item label="详细地址">
                   <el-input
                     v-model="siteForm.DetailAddress"
@@ -88,62 +105,92 @@
                     placeholder="点击地图后自动填充，可手动修改"
                   />
                 </el-form-item>
-                <el-form-item label="经度">
-                  <el-input-number
-                    v-model="siteForm.Longitude"
-                    :precision="6"
-                    :step="0.0001"
-                    :controls="false"
-                    placeholder="112.617734"
-                    class="full"
-                  />
+                <el-form-item label="经度 / 纬度">
+                  <div class="two-col">
+                    <el-input-number
+                      v-model="siteForm.Longitude"
+                      :precision="6"
+                      :step="0.0001"
+                      :controls="false"
+                      placeholder="经度 112.617734"
+                      class="full"
+                    />
+                    <el-input-number
+                      v-model="siteForm.Latitude"
+                      :precision="6"
+                      :step="0.0001"
+                      :controls="false"
+                      placeholder="纬度 37.757249"
+                      class="full"
+                    />
+                  </div>
                 </el-form-item>
-                <el-form-item label="纬度">
-                  <el-input-number
-                    v-model="siteForm.Latitude"
-                    :precision="6"
-                    :step="0.0001"
-                    :controls="false"
-                    placeholder="37.757249"
-                    class="full"
-                  />
-                </el-form-item>
-                <el-form-item label="省 / 市">
+                <el-form-item label="省 / 市 / 县">
                   <div class="two-col">
                     <el-input v-model="siteForm.Province" placeholder="省" />
                     <el-input v-model="siteForm.City" placeholder="市" />
+                    <el-input v-model="siteForm.County" placeholder="区 / 县" />
                   </div>
                 </el-form-item>
-                <el-form-item label="区县">
-                  <el-input v-model="siteForm.County" placeholder="区 / 县" />
-                </el-form-item>
-                <el-form-item label="适用行程">
-                  <el-select
-                    v-model="siteForm.ReturnTrip"
-                    placeholder="选择适用行程"
-                    class="full"
-                  >
-                    <el-option
-                      v-for="item in returnTripOptions"
-                      :key="item.value"
-                      :label="item.label"
-                      :value="item.value"
+                <el-form-item label="行程 / 状态">
+                  <div class="two-col">
+                    <el-select
+                      v-model="siteForm.ReturnTrip"
+                      placeholder="选择适用行程"
+                      class="full"
+                    >
+                      <el-option
+                        v-for="item in returnTripOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                    <el-switch
+                      v-model="siteForm.Status"
+                      active-text="启用"
+                      inactive-text="禁用"
                     />
-                  </el-select>
+                  </div>
                 </el-form-item>
-                <el-form-item label="所属组织">
-                  <el-input
-                    v-model="siteForm.OrganizationId"
-                    placeholder="OrganizationId"
-                    disabled
-                  />
-                </el-form-item>
-                <el-form-item label="状态">
-                  <el-switch
-                    v-model="siteForm.Status"
-                    active-text="启用"
-                    inactive-text="禁用"
-                  />
+                <el-form-item label="站点图片">
+                  <el-upload
+                    :action="''"
+                    :auto-upload="false"
+                    :show-file-list="false"
+                    :limit="9"
+                    accept="image/*"
+                    :on-change="handleSiteImgChange"
+                  >
+                    <div class="site-img-list">
+                      <div
+                        v-for="(img, idx) in siteForm.ImgList"
+                        :key="idx"
+                        class="site-img-item"
+                      >
+                        <img
+                          :src="siteImgSrc(img)"
+                          @click="previewSiteImg(idx)"
+                        />
+                        <i
+                          class="el-icon-close site-img-del"
+                          @click="removeSiteImg(idx, img)"
+                        ></i>
+                      </div>
+                      <div
+                        v-if="siteForm.ImgList.length < 9"
+                        class="site-img-add"
+                      >
+                        <i class="el-icon-plus"></i>
+                        <div class="site-img-add__text">上传图片</div>
+                      </div>
+                    </div>
+                  </el-upload>
+                  <div v-if="siteImgUploading" class="site-img-uploading">
+                    上传中 {{ siteImgUploadProgress }}%（{{
+                      siteImgUploadName
+                    }}）
+                  </div>
                 </el-form-item>
                 <el-form-item class="form-actions">
                   <el-button
@@ -162,9 +209,23 @@
         <div class="panel">
           <div class="panel__head">
             <span class="panel__title">站点列表（共 {{ siteTotal }} 个）</span>
-            <el-button type="text" size="mini" @click="loadSites()"
-              >刷新</el-button
-            >
+            <div class="panel__tools">
+              <el-input
+                v-model="siteKeyword"
+                size="mini"
+                placeholder="搜索站点名称"
+                clearable
+                class="site-search"
+                @keyup.enter.native="searchSites"
+                @clear="searchSites"
+              />
+              <el-button size="mini" type="primary" @click="searchSites"
+                >搜索</el-button
+              >
+              <el-button type="text" size="mini" @click="loadSites()"
+                >刷新</el-button
+              >
+            </div>
           </div>
           <el-table
             v-loading="siteLoading"
@@ -189,6 +250,11 @@
                 {{ returnTripLabel(scope.row.ReturnTrip) }}
               </template>
             </el-table-column>
+            <!-- <el-table-column label="区域权限" width="140" show-overflow-tooltip>
+              <template slot-scope="scope">
+                {{ locationRoleLabel(scope.row.LocationRole) }}
+              </template>
+            </el-table-column> -->
             <el-table-column
               prop="Status_Name"
               label="状态"
@@ -449,6 +515,132 @@
             layout="total, sizes, prev, pager, next"
             @size-change="handleTplSizeChange"
             @current-change="handleTplPageChange"
+          >
+          </el-pagination>
+        </div>
+      </el-tab-pane>
+
+      <!-- ==================== 车辆管理 ==================== -->
+      <el-tab-pane label="车辆管理" name="vehicle">
+        <div class="panel">
+          <div class="panel__head">
+            <span class="panel__title"
+              >巴士车辆（共 {{ vehicleTotal }} 辆）</span
+            >
+            <div class="panel__tools">
+              <el-input
+                v-model="vehicleSearch.VehicleNo"
+                size="mini"
+                clearable
+                placeholder="车牌号"
+                class="line-filter"
+                @keyup.enter.native="handleVehicleSearch"
+                @clear="handleVehicleSearch"
+              />
+              <el-select
+                v-model="vehicleSearch.CarStatus"
+                size="mini"
+                clearable
+                placeholder="车辆状态"
+                class="line-filter"
+                @change="handleVehicleSearch"
+              >
+                <el-option
+                  v-for="item in vehicleStatusOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+              <el-button type="primary" size="mini" @click="handleVehicleSearch"
+                >查询</el-button
+              >
+              <el-button size="mini" @click="resetVehicleSearch"
+                >重置</el-button
+              >
+              <el-button type="primary" size="mini" @click="openVehicleDialog()"
+                >新建车辆</el-button
+              >
+              <el-button size="mini" @click="loadVehicles()">刷新</el-button>
+            </div>
+          </div>
+          <el-table
+            v-loading="vehicleLoading"
+            :data="vehicleList"
+            border
+            size="mini"
+            style="width: 100%"
+          >
+            <el-table-column
+              prop="VehicleNo"
+              label="车牌号"
+              min-width="110"
+              align="center"
+            />
+            <el-table-column label="车辆类型" min-width="100" align="center">
+              <template slot-scope="scope">
+                {{ vehicleTypeLabel(scope.row) }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="SeatTotal"
+              label="座位数"
+              width="80"
+              align="center"
+            />
+            <el-table-column label="是否启用" width="90" align="center">
+              <template slot-scope="scope">
+                <el-tag
+                  size="mini"
+                  :type="scope.row.IsUse ? 'success' : 'info'"
+                >
+                  {{ scope.row.IsUse ? '启用' : '停用' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="车辆状态" width="100" align="center">
+              <template slot-scope="scope">
+                <el-tag size="mini" type="warning">
+                  {{ vehicleStatusLabel(scope.row) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="BuyDate"
+              label="购车日期"
+              width="110"
+              align="center"
+            />
+            <el-table-column label="司机" min-width="120" align="center">
+              <template slot-scope="scope">
+                {{ scope.row.DriverId_Name || scope.row.DriverId || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="Remark"
+              label="备注"
+              min-width="120"
+              show-overflow-tooltip
+            />
+            <el-table-column label="操作" width="80" align="center">
+              <template slot-scope="scope">
+                <el-button
+                  type="text"
+                  size="mini"
+                  @click="openVehicleDialog(scope.row)"
+                  >编辑</el-button
+                >
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-pagination
+            :current-page="vehiclePage.pageIndex"
+            :page-size="vehiclePage.pageSize"
+            :page-sizes="[10, 12, 20, 50]"
+            :total="vehicleTotal"
+            layout="total, sizes, prev, pager, next"
+            @size-change="handleVehicleSizeChange"
+            @current-change="handleVehiclePageChange"
           >
           </el-pagination>
         </div>
@@ -899,6 +1091,133 @@
         >
       </span>
     </el-dialog>
+
+    <!-- 新建 / 编辑车辆 -->
+    <el-dialog
+      :title="vehicleForm.Id ? '编辑车辆 #' + vehicleForm.Id : '新建车辆'"
+      :visible.sync="vehicleDialogVisible"
+      width="560px"
+      :close-on-click-modal="false"
+    >
+      <el-form
+        ref="vehicleForm"
+        :model="vehicleForm"
+        :rules="vehicleRules"
+        label-width="96px"
+        size="mini"
+      >
+        <el-form-item label="车牌号" prop="VehicleNo">
+          <el-input
+            v-model="vehicleForm.VehicleNo"
+            placeholder="如：晋A9XXXD"
+          />
+        </el-form-item>
+        <el-row :gutter="8">
+          <el-col :span="12">
+            <el-form-item label="车辆类型" prop="VehicleType">
+              <el-select
+                v-model="vehicleForm.VehicleType"
+                placeholder="选择车辆类型"
+                class="full"
+              >
+                <el-option
+                  v-for="item in vehicleTypeOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="座位数" prop="SeatTotal">
+              <el-input-number
+                v-model="vehicleForm.SeatTotal"
+                :min="1"
+                :controls="false"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="8">
+          <el-col :span="12">
+            <el-form-item label="车辆状态" prop="CarStatus">
+              <el-select
+                v-model="vehicleForm.CarStatus"
+                placeholder="选择车辆状态"
+                class="full"
+              >
+                <el-option
+                  v-for="item in vehicleStatusOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="购车日期">
+              <el-date-picker
+                v-model="vehicleForm.BuyDate"
+                type="date"
+                value-format="yyyy-MM-dd"
+                placeholder="选择购车日期"
+                class="full"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="司机">
+          <el-select
+            v-model="vehicleForm.DriverId"
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            placeholder="选择司机，接口未返回时可直接填 ID"
+            class="full"
+          >
+            <el-option
+              v-for="item in tplDriverOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="所属公司">
+          <el-input
+            v-model="vehicleForm.CompanyId"
+            clearable
+            placeholder="选填，CompanyId"
+          />
+        </el-form-item>
+        <el-form-item label="是否启用">
+          <el-switch
+            v-model="vehicleForm.IsUse"
+            active-text="启用"
+            inactive-text="停用"
+          />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="vehicleForm.Remark" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button size="small" @click="vehicleDialogVisible = false"
+          >取消</el-button
+        >
+        <el-button
+          type="primary"
+          size="small"
+          :loading="vehicleSaving"
+          @click="saveVehicle"
+          >保存</el-button
+        >
+      </span>
+    </el-dialog>
   </div>
 </template>
 
@@ -906,6 +1225,16 @@
 import { Message } from 'element-ui'
 import request from '@/utils/request'
 import loadBMapGL from '@/utils/bmap'
+import { BASE_API } from '@/config/env'
+
+// 图片地址补全：后端返回的是相对路径（如 /wxImg/xxx.jpg），
+// 开发环境需拼 /api 走 devServer 代理，生产与后端同源则保持相对路径
+const resolveImgUrl = (p) => {
+  if (!p) return ''
+  if (/^(https?:)?\/\//i.test(p) || /^data:/i.test(p)) return p
+  const base = BASE_API === '/' ? '' : BASE_API
+  return base + (p.charAt(0) === '/' ? p : '/' + p)
+}
 
 // 默认组织：与后台「巴士订单」现有数据一致（山西畅亿科技有限公司）
 const DEFAULT_ORG = '200004-49a09eab654f4064ae2031ee76bffd90'
@@ -913,6 +1242,8 @@ const DEFAULT_ORG = '200004-49a09eab654f4064ae2031ee76bffd90'
 const emptySite = () => ({
   Id: null,
   LocationName: '',
+  // 地址区域权限：值来自 /BusOrder/GetMyLocationRoleList 返回的 Id
+  LocationRole: null,
   Longitude: null,
   Latitude: null,
   DetailAddress: '',
@@ -923,7 +1254,14 @@ const emptySite = () => ({
   ReturnTrip: 0,
   OrganizationId: DEFAULT_ORG,
   Status: true,
+  // 站点图片集合：[{ Id: 0, ImgPath: "" }]
+  ImgList: [],
 })
+
+// 分片大小 4MB，与小程序端捎货图片上传保持一致
+const CHUNK_SIZE = 4 * 1024 * 1024
+// 站点图片大小上限 100K
+const IMG_MAX_SIZE = 100 * 1024
 
 const emptyLine = () => ({
   Id: null,
@@ -982,6 +1320,19 @@ const emptyTpl = () => ({
   OrganizationId: DEFAULT_ORG,
 })
 
+const emptyVehicle = () => ({
+  Id: null,
+  VehicleNo: '',
+  VehicleType: null,
+  SeatTotal: null,
+  IsUse: true,
+  CarStatus: null,
+  BuyDate: '',
+  Remark: null,
+  DriverId: '',
+  CompanyId: null,
+})
+
 export default {
   name: 'BusAdmin',
   data() {
@@ -999,12 +1350,19 @@ export default {
         { value: 1, label: '去程' },
         { value: 2, label: '返程' },
       ],
+      // 地址区域权限字典（我的权限范围）
+      locationRoleList: [],
+      locationRoleLoading: false,
       siteForm: emptySite(),
       siteSaving: false,
+      siteImgUploading: false,
+      siteImgUploadProgress: 0,
+      siteImgUploadName: '',
       siteLoading: false,
       siteList: [],
       siteTotal: 0,
       sitePage: { pageIndex: 1, pageSize: 10 },
+      siteKeyword: '',
       allSites: [],
       startSites: [],
       endSites: [],
@@ -1074,6 +1432,33 @@ export default {
           { required: true, message: '请选择结束时间', trigger: 'change' },
         ],
       },
+      // —— 车辆管理 ——
+      vehicleList: [],
+      vehicleTotal: 0,
+      vehicleLoading: false,
+      vehiclePage: { pageIndex: 1, pageSize: 12 },
+      vehicleSearch: { VehicleNo: '', CarStatus: null },
+      // 字典：车辆类型 / 车辆状态
+      vehicleTypeList: [],
+      vehicleStatusList: [],
+      vehicleDialogVisible: false,
+      vehicleSaving: false,
+      vehicleForm: emptyVehicle(),
+      vehicleRules: {
+        VehicleNo: [
+          { required: true, message: '请输入车牌号', trigger: 'blur' },
+        ],
+        VehicleType: [
+          { required: true, message: '请选择车辆类型', trigger: 'change' },
+        ],
+        SeatTotal: [
+          { required: true, message: '请输入座位数', trigger: 'blur' },
+        ],
+        CarStatus: [
+          { required: true, message: '请选择车辆状态', trigger: 'change' },
+        ],
+      },
+      vehicleDictLoaded: false,
     }
   },
   computed: {
@@ -1106,6 +1491,30 @@ export default {
         }),
       }))
     },
+    // 车辆类型下拉：/BusOrder/GetBusVehicleTypeList
+    vehicleTypeOptions() {
+      return this.vehicleTypeList.map((item) => ({
+        value: pickValue(item, ['Id', 'Value', 'TypeValue', 'VehicleType']),
+        label: pickValue(item, [
+          'Name',
+          'TypeName',
+          'VehicleType_Name',
+          'Title',
+        ]),
+      }))
+    },
+    // 车辆状态下拉：/BusOrder/BusCarStatusList
+    vehicleStatusOptions() {
+      return this.vehicleStatusList.map((item) => ({
+        value: pickValue(item, ['Id', 'Value', 'Status', 'CarStatus']),
+        label: pickValue(item, [
+          'Name',
+          'StatusName',
+          'CarStatus_Name',
+          'Title',
+        ]),
+      }))
+    },
   },
   created() {
     // 地图实例、BMapGL 命名空间不放进 data：避免被 Vue 做成响应式
@@ -1115,6 +1524,8 @@ export default {
     this.BMapGL = null
     this.localSearch = null
     this.searchTimer = null
+    // 默认全量站点标注
+    this.siteMarkers = []
   },
   mounted() {
     this.initMap()
@@ -1123,6 +1534,7 @@ export default {
     this.loadLines()
     this.loadTemplates()
     this.loadTplOptions()
+    this.loadLocationRoles()
   },
   activated() {
     if (this.activeTab === 'site') this.$nextTick(this.resizeMap)
@@ -1149,6 +1561,8 @@ export default {
         map.centerAndZoom(new BMapGL.Point(112.562209, 37.79319), 12)
         map.enableScrollWheelZoom(true)
         map.addControl(new BMapGL.NavigationControl())
+        // 比例标尺
+        map.addControl(new BMapGL.ScaleControl())
         map.addEventListener('click', (e) => this.handleMapClick(e.latlng))
         this.map = map
         this.geocoder = new BMapGL.Geocoder()
@@ -1158,6 +1572,11 @@ export default {
           onSearchComplete: (results) => this.handleSearchComplete(results),
         })
         this.mapReady = true
+        this.siteLabels = []
+        // 进入页面默认标注全部站点
+        this.showAllSiteMarkers()
+        // 等高布局生效后重新计算地图尺寸
+        this.$nextTick(() => this.resizeMap())
       } catch (e) {
         this.mapError = e.message || '地图加载失败'
       } finally {
@@ -1194,17 +1613,86 @@ export default {
         }
       })
     },
-    drawMarker(lng, lat) {
+    // 默认标注全部站点（/BusOrder/GetSearchBusLocation 后台所有站点）
+    async showAllSiteMarkers() {
+      if (!this.map || !this.BMapGL) return
+      if (!this.allSites.length) await this.loadAllSites()
+      const list = (this.allSites || []).filter(
+        (s) => s && Number(s.Longitude) && Number(s.Latitude),
+      )
+      if (!list.length) return
+      this.siteMarkers = list.map((s) => {
+        const point = new this.BMapGL.Point(
+          Number(s.Longitude),
+          Number(s.Latitude),
+        )
+        const mk = new this.BMapGL.Marker(point)
+        mk.addEventListener('click', () => {
+          this.map.centerAndZoom(point, 16)
+        })
+        return mk
+      })
+      this.siteMarkers.forEach((mk) => this.map.addOverlay(mk))
+      // 站点名称标注
+      this.siteLabels = []
+      list.forEach((s) => {
+        this.createSiteLabel(
+          s.LocationName,
+          Number(s.Longitude),
+          Number(s.Latitude),
+        )
+      })
+      // 自动缩放到能看全所有站点
+      if (this.siteMarkers.length > 1) {
+        this.map.setViewport(this.siteMarkers.map((mk) => mk.getPosition()))
+      } else {
+        this.map.centerAndZoom(this.siteMarkers[0].getPosition(), 15)
+      }
+    },
+    // 清除默认全量标注（进入编辑时调用，避免和编辑标注冲突）
+    clearSiteMarkers() {
+      if (!this.map) return
+      ;(this.siteMarkers || []).forEach((mk) => this.map.removeOverlay(mk))
+      ;(this.siteLabels || []).forEach((lb) => this.map.removeOverlay(lb))
+      this.siteMarkers = []
+      this.siteLabels = []
+    },
+    // 地图上的站点名称标签
+    createSiteLabel(name, lng, lat) {
+      if (!this.BMapGL.Label || !name) return null
+      const label = new this.BMapGL.Label(name, {
+        position: new this.BMapGL.Point(lng, lat),
+        offset: new this.BMapGL.Size(0, -28),
+      })
+      label.setStyle({
+        color: '#1f2d3d',
+        fontSize: '12px',
+        height: '20px',
+        lineHeight: '20px',
+        padding: '0 6px',
+        border: '1px solid #c8d6e5',
+        borderRadius: '10px',
+        background: 'rgba(255,255,255,0.92)',
+        whiteSpace: 'nowrap',
+      })
+      this.map.addOverlay(label)
+      this.siteLabels.push(label)
+      return label
+    },
+    drawMarker(lng, lat, name) {
       if (!this.map || !this.BMapGL) return
       this.map.clearOverlays()
+      this.siteMarkers = []
+      this.siteLabels = []
       this.map.addOverlay(
         new this.BMapGL.Marker(new this.BMapGL.Point(lng, lat)),
       )
+      this.createSiteLabel(name, lng, lat)
     },
-    focusMap(lng, lat, zoom) {
+    focusMap(lng, lat, zoom, name) {
       if (!this.map || !this.BMapGL || lng == null || lat == null) return
       this.map.centerAndZoom(new this.BMapGL.Point(lng, lat), zoom || 15)
-      this.drawMarker(lng, lat)
+      this.drawMarker(lng, lat, name)
     },
 
     // ==================== 地图搜索 ====================
@@ -1266,7 +1754,7 @@ export default {
         new this.BMapGL.Point(item.longitude, item.latitude),
         17,
       )
-      this.drawMarker(item.longitude, item.latitude)
+      this.drawMarker(item.longitude, item.latitude, item.title)
       this.siteForm.Longitude = Number(item.longitude.toFixed(6))
       this.siteForm.Latitude = Number(item.latitude.toFixed(6))
       if (!this.siteForm.LocationName) this.siteForm.LocationName = item.title
@@ -1282,6 +1770,7 @@ export default {
     handleTabClick(tab) {
       if (tab.name === 'site') this.$nextTick(this.resizeMap)
       if (tab.name === 'tpl') this.loadTemplates()
+      if (tab.name === 'vehicle') this.initVehicleTab()
     },
 
     // ==================== 站点 ====================
@@ -1291,10 +1780,13 @@ export default {
         const res = await request({
           url: '/BusOrder/GetPageList',
           method: 'post',
-          data: {
-            pageIndex: this.sitePage.pageIndex,
-            pageSize: this.sitePage.pageSize,
-          },
+          data: Object.assign(
+            {
+              pageIndex: this.sitePage.pageIndex,
+              pageSize: this.sitePage.pageSize,
+            },
+            this.siteKeyword ? { LocationName: this.siteKeyword } : {},
+          ),
         })
         this.siteList = res.data || []
         this.siteTotal = res.count || 0
@@ -1318,6 +1810,22 @@ export default {
         this.allSites = res.data || []
       } catch (e) {
         this.allSites = []
+      }
+    },
+    // 地址区域权限字典：获取当前登录人拥有的地址区域权限
+    async loadLocationRoles() {
+      this.locationRoleLoading = true
+      try {
+        const res = await request({
+          url: '/BusOrder/GetMyLocationRoleList',
+          method: 'get',
+          noDuplicate: true,
+        })
+        this.locationRoleList = res.data || []
+      } catch (e) {
+        this.locationRoleList = []
+      } finally {
+        this.locationRoleLoading = false
       }
     },
     // 路线弹窗站点远程搜索：type 为 'start' / 'end'，两列互不影响
@@ -1355,6 +1863,11 @@ export default {
     remoteMethodEnd(query) {
       return this.searchLocation(query, 'end')
     },
+    // 站点列表搜索：按 LocationName 查询，从第一页开始
+    searchSites() {
+      this.sitePage.pageIndex = 1
+      this.loadSites()
+    },
     handleSiteSizeChange(size) {
       this.sitePage.pageSize = size
       this.sitePage.pageIndex = 1
@@ -1368,12 +1881,186 @@ export default {
       this.siteForm = emptySite()
       if (this.$refs.siteForm) this.$refs.siteForm.clearValidate()
     },
+
+    // —— 站点图片相关 ——
+    // 兼容不同后端字段：ImgList / SiteImgList / Imgs / Images / rows 等
+    _normalizeSiteImgList(detail) {
+      const arr =
+        detail.ImgList ||
+        detail.ImgList ||
+        detail.SiteImgList ||
+        detail.Imgs ||
+        detail.Images ||
+        detail.rows ||
+        []
+      if (!Array.isArray(arr)) return []
+      return arr
+        .filter(
+          (i) => i && (i.ImgPath || i.url || i.Path || typeof i === 'string'),
+        )
+        .map((i) => {
+          if (typeof i === 'string') return { Id: 0, ImgPath: i }
+          return { Id: i.Id || 0, ImgPath: i.ImgPath || i.url || i.Path || '' }
+        })
+    },
+
+    // el-upload :on-change 触发：文件选好后直接分片上传
+    handleSiteImgChange(file) {
+      if (!file || !file.raw) return
+      if ((this.siteForm.ImgList || []).length >= 9) {
+        Message.warning('最多上传 9 张图片')
+        return
+      }
+      if (file.raw.size > IMG_MAX_SIZE) {
+        Message.warning('图片大小不能超过 100K，请压缩后再上传')
+        return
+      }
+      this._uploadFileChunked(file.raw)
+        .then((url) => {
+          this.siteForm.ImgList = [
+            ...(this.siteForm.ImgList || []),
+            { Id: 0, ImgPath: url },
+          ]
+          Message.success('上传成功')
+        })
+        .catch((err) => {
+          Message.error(err && err.message ? err.message : '上传失败')
+        })
+    },
+
+    // 分片上传：POST /BusOrder/ImageChunk，参数与捎货保持一致
+    // { FileKey, ChunkIndex, ChunkCount, ChunkData(base64) }
+    _uploadFileChunked(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onerror = () => reject(new Error('读取文件失败'))
+        reader.onload = (e) => {
+          const buffer = e.target.result
+          const totalSize = buffer.byteLength
+          const totalChunks = Math.ceil(totalSize / CHUNK_SIZE)
+          const fileId =
+            Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+          let uploadedCount = 0
+
+          this.siteImgUploading = true
+          this.siteImgUploadName = file.name || ''
+          this.siteImgUploadProgress = 0
+
+          const sendChunk = (i) => {
+            const start = i * CHUNK_SIZE
+            const end = Math.min(start + CHUNK_SIZE, totalSize)
+            const chunk = buffer.slice(start, end)
+            const base64 = this._arrayBufferToBase64(chunk)
+
+            request({
+              url: '/BusOrder/ImageChunk',
+              method: 'post',
+              noDuplicate: false,
+              silent: true,
+              data: {
+                FileKey: fileId,
+                ChunkIndex: i,
+                ChunkCount: totalChunks,
+                ChunkData: base64,
+              },
+            })
+              .then((res) => {
+                uploadedCount++
+                this.siteImgUploadProgress = Math.round(
+                  (uploadedCount / totalChunks) * 100,
+                )
+                if (uploadedCount === totalChunks) {
+                  this.siteImgUploading = false
+                  // 最后一片返回完整 URL，兼容 { data: url } / 直接返回 url
+                  const url =
+                    (res && res.data && (res.data.ImgPath || res.data.url)) ||
+                    (typeof (res && res.data) === 'string' ? res.data : '') ||
+                    (typeof res === 'string' ? res : '')
+                  if (url) resolve(url)
+                  else reject(new Error('未返回有效图片地址'))
+                } else {
+                  sendChunk(i + 1)
+                }
+              })
+              .catch((err) => {
+                this.siteImgUploading = false
+                reject(err)
+              })
+          }
+          sendChunk(0)
+        }
+        reader.readAsArrayBuffer(file)
+      })
+    },
+
+    // ArrayBuffer → base64
+    _arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer)
+      let binary = ''
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i])
+      }
+      // btoa 在现代浏览器可用；IE 不支持但后台已用 Element UI，默认 Chrome/Edge
+      return typeof btoa === 'function'
+        ? btoa(binary)
+        : Buffer.from(buffer).toString('base64')
+    },
+
+    // 站点图片可访问地址（相对路径补全为可加载的 URL）
+    siteImgSrc(img) {
+      return resolveImgUrl((img && (img.ImgPath || img.url)) || '')
+    },
+
+    // 预览图片
+    previewSiteImg(idx) {
+      const urls = (this.siteForm.ImgList || []).map((i) => this.siteImgSrc(i))
+      const current = urls[idx]
+      if (!current) return
+      // Element UI 没有原生图片预览，直接 window.open 兜底；
+      // 如需体验更好可换成 el-image 的 preview-src-list
+      const img = new Image()
+      img.src = current
+      const w = window.open('')
+      if (w) {
+        w.document.write(
+          `<img src="${current}" style="max-width:100%;max-height:100vh;margin:auto;display:block;background:#222"/>`,
+        )
+      }
+    },
+
+    // 删除图片：本地立即移除；若图片已有后台 Id 则调删除接口
+    async removeSiteImg(idx, img) {
+      const path = img.ImgPath || img.url || ''
+      try {
+        await request({
+          url: '/BusOrder/DeleteBusLongitudeImage',
+          method: 'get',
+          params: { Id: img.Id || 0 },
+          silent: true,
+        })
+      } catch (e) {
+        // 删除接口失败不影响本地，避免图片无法移除
+      }
+      this.siteForm.ImgList = (this.siteForm.ImgList || []).filter(
+        (_, i) => i !== idx,
+      )
+      Message.success('已删除')
+    },
+
     // 适用行程文案：0=公用 1=去程 2=返程
     returnTripLabel(val) {
       const hit = this.returnTripOptions.find(
         (item) => item.value === Number(val),
       )
       return hit ? hit.label : '公用'
+    },
+    // 区域权限名称：按 LocationRole Id 从字典反查，兼容 Id 类型（number/string）
+    locationRoleLabel(val) {
+      console.log('----', val)
+      if (val === null || val === undefined || val === '') return '-'
+      const s = String(val)
+      const hit = this.locationRoleList.find((item) => String(item.Value) === s)
+      return hit ? hit.Text : '-'
     },
     async editSite(row) {
       try {
@@ -1386,6 +2073,10 @@ export default {
         this.siteForm = Object.assign(emptySite(), {
           Id: detail.Id,
           LocationName: detail.LocationName || '',
+          LocationRole:
+            detail.LocationRole !== undefined && detail.LocationRole !== null
+              ? detail.LocationRole
+              : null,
           Longitude: detail.Longitude != null ? Number(detail.Longitude) : null,
           Latitude: detail.Latitude != null ? Number(detail.Latitude) : null,
           DetailAddress: detail.DetailAddress || '',
@@ -1396,8 +2087,17 @@ export default {
             detail.ReturnTrip == null ? 0 : Number(detail.ReturnTrip) || 0,
           OrganizationId: detail.OrganizationId || DEFAULT_ORG,
           Status: detail.Status !== false,
+          // 回填图片集合，兼容多种字段名
+          ImgList: this._normalizeSiteImgList(detail),
         })
-        this.focusMap(this.siteForm.Longitude, this.siteForm.Latitude)
+        // 进入编辑：先清掉进页面时标注的全部站点，避免与当前站点标注叠在一起
+        this.clearSiteMarkers()
+        this.focusMap(
+          this.siteForm.Longitude,
+          this.siteForm.Latitude,
+          15,
+          this.siteForm.LocationName,
+        )
       } catch (e) {
         // 拦截器已提示
       }
@@ -1413,6 +2113,8 @@ export default {
         this.focusMap(
           detail.Longitude != null ? Number(detail.Longitude) : null,
           detail.Latitude != null ? Number(detail.Latitude) : null,
+          15,
+          detail.LocationName || row.LocationName,
         )
       } catch (e) {
         // 拦截器已提示
@@ -1428,6 +2130,7 @@ export default {
         this.siteSaving = true
         const payload = {
           LocationName: this.siteForm.LocationName,
+          LocationRole: this.siteForm.LocationRole ?? null,
           Longitude: this.siteForm.Longitude,
           Latitude: this.siteForm.Latitude,
           DetailAddress: this.siteForm.DetailAddress,
@@ -1437,6 +2140,10 @@ export default {
           County: this.siteForm.County || null,
           ReturnTrip: Number(this.siteForm.ReturnTrip) || 0,
           Status: this.siteForm.Status,
+          ImgList: (this.siteForm.ImgList || []).map((img) => ({
+            Id: img.Id || 0,
+            ImgPath: img.ImgPath || img.url || '',
+          })),
         }
         try {
           if (this.siteForm.Id) {
@@ -1782,7 +2489,7 @@ export default {
       }
     },
 
-    // 删除班车模板：TODO 接口上线后放开 request，按后端文档调整 url 与参数
+    // 删除班车模板：GET /BusOrder/DeleteBusDepartureTemplate?Id=
     async removeTemplate(row) {
       try {
         await this.$confirm(
@@ -1799,19 +2506,17 @@ export default {
       } catch (e) {
         return // 取消
       }
-      Message.info('删除接口暂未提供，等待后端上线后开放')
-      // TODO: 接口上线后启用
-      // try {
-      //   await request({
-      //     url: '/BusOrder/DeleteBusLineTemplate',
-      //     method: 'post',
-      //     data: { Id: row.Id },
-      //   })
-      //   Message.success('删除成功')
-      //   this.loadTemplates()
-      // } catch (e) {
-      //   // 拦截器已提示
-      // }
+      try {
+        await request({
+          url: '/BusOrder/DeleteBusDepartureTemplate',
+          method: 'get',
+          params: { Id: row.Id },
+        })
+        Message.success('删除成功')
+        this.loadTemplates()
+      } catch (e) {
+        // 拦截器已提示
+      }
     },
 
     // ==================== 班车模板 ====================
@@ -1969,6 +2674,169 @@ export default {
         }
       })
     },
+
+    // ==================== 车辆管理 ====================
+    // 首次进入 tab：拉列表 + 字典 + 司机下拉
+    initVehicleTab() {
+      this.loadVehicles()
+      this.loadVehicleDicts()
+      if (!this.tplDrivers.length) this.loadTplOptions()
+    },
+    // 车辆类型 / 车辆状态字典（只拉一次）
+    async loadVehicleDicts() {
+      if (this.vehicleDictLoaded) return
+      this.vehicleDictLoaded = true
+      const [typeRes, statusRes] = await Promise.all([
+        request({
+          url: '/BusOrder/GetBusVehicleTypeList',
+          method: 'post',
+          data: {},
+          silent: true,
+        }).catch(() => null),
+        request({
+          url: '/BusOrder/BusCarStatusList',
+          method: 'post',
+          data: {},
+          silent: true,
+        }).catch(() => null),
+      ])
+      this.vehicleTypeList = toList(typeRes)
+      this.vehicleStatusList = toList(statusRes)
+    },
+    async loadVehicles() {
+      this.vehicleLoading = true
+      try {
+        const res = await request({
+          url: '/BusOrder/GetBusVehiclePageList',
+          method: 'post',
+          data: {
+            VehicleNo: this.vehicleSearch.VehicleNo || null,
+            CarStatus:
+              this.vehicleSearch.CarStatus == null
+                ? null
+                : this.vehicleSearch.CarStatus,
+            pageIndex: this.vehiclePage.pageIndex,
+            pageSize: this.vehiclePage.pageSize,
+          },
+        })
+        this.vehicleList = res.data || []
+        this.vehicleTotal = res.count || 0
+      } catch (e) {
+        this.vehicleList = []
+        this.vehicleTotal = 0
+      } finally {
+        this.vehicleLoading = false
+      }
+    },
+    handleVehicleSearch() {
+      this.vehiclePage.pageIndex = 1
+      this.loadVehicles()
+    },
+    resetVehicleSearch() {
+      this.vehicleSearch = { VehicleNo: '', CarStatus: null }
+      this.handleVehicleSearch()
+    },
+    handleVehicleSizeChange(size) {
+      this.vehiclePage.pageSize = size
+      this.vehiclePage.pageIndex = 1
+      this.loadVehicles()
+    },
+    handleVehiclePageChange(page) {
+      this.vehiclePage.pageIndex = page
+      this.loadVehicles()
+    },
+    // 类型 / 状态文案：优先行上自带的 *_Name，其次用字典映射
+    vehicleTypeLabel(row) {
+      if (row.VehicleType_Name) return row.VehicleType_Name
+      const hit = this.vehicleTypeOptions.find(
+        (item) => String(item.value) === String(row.VehicleType),
+      )
+      return hit ? hit.label : row.VehicleType == null ? '-' : row.VehicleType
+    },
+    vehicleStatusLabel(row) {
+      if (row.CarStatus_Name) return row.CarStatus_Name
+      const hit = this.vehicleStatusOptions.find(
+        (item) => String(item.value) === String(row.CarStatus),
+      )
+      return hit ? hit.label : row.CarStatus == null ? '-' : row.CarStatus
+    },
+    // 新建 / 编辑车辆：编辑时先拉详情
+    async openVehicleDialog(row) {
+      this.loadVehicleDicts()
+      if (!this.tplDrivers.length) this.loadTplOptions()
+      if (row && row.Id) {
+        try {
+          const res = await request({
+            url: '/BusOrder/GetBusVehicleInfo',
+            method: 'get',
+            params: { Id: row.Id },
+          })
+          const detail = res.data || {}
+          this.vehicleForm = Object.assign(emptyVehicle(), {
+            Id: detail.Id,
+            VehicleNo: detail.VehicleNo || '',
+            VehicleType:
+              detail.VehicleType == null ? null : Number(detail.VehicleType),
+            SeatTotal:
+              detail.SeatTotal == null ? null : Number(detail.SeatTotal),
+            IsUse: detail.IsUse !== false,
+            CarStatus:
+              detail.CarStatus == null ? null : Number(detail.CarStatus),
+            BuyDate: (detail.BuyDate || '').slice(0, 10),
+            Remark: detail.Remark == null ? null : detail.Remark,
+            DriverId: detail.DriverId || '',
+            CompanyId: detail.CompanyId == null ? null : detail.CompanyId,
+          })
+        } catch (e) {
+          return
+        }
+      } else {
+        this.vehicleForm = emptyVehicle()
+      }
+      this.vehicleDialogVisible = true
+      this.$nextTick(() => {
+        if (this.$refs.vehicleForm) this.$refs.vehicleForm.clearValidate()
+      })
+    },
+    async saveVehicle() {
+      this.$refs.vehicleForm.validate(async (valid) => {
+        if (!valid) return
+        this.vehicleSaving = true
+        const payload = {
+          VehicleNo: this.vehicleForm.VehicleNo,
+          VehicleType: this.vehicleForm.VehicleType,
+          SeatTotal: this.vehicleForm.SeatTotal,
+          IsUse: this.vehicleForm.IsUse,
+          CarStatus: this.vehicleForm.CarStatus,
+          BuyDate: this.vehicleForm.BuyDate || null,
+          Remark: this.vehicleForm.Remark || null,
+          DriverId: this.vehicleForm.DriverId || null,
+          CompanyId: this.vehicleForm.CompanyId || null,
+        }
+        try {
+          if (this.vehicleForm.Id) {
+            await request({
+              url: '/BusOrder/UpdateBusVehicle',
+              method: 'post',
+              data: Object.assign(payload, { Id: this.vehicleForm.Id }),
+            })
+          } else {
+            await request({
+              url: '/BusOrder/CreateBusVehicle',
+              method: 'post',
+              data: payload,
+            })
+          }
+          Message.success('保存成功')
+          this.vehicleDialogVisible = false
+          this.loadVehicles()
+        } catch (e) {
+          // 拦截器已提示
+        } finally {
+          this.vehicleSaving = false
+        }
+      })
+    },
   },
 }
 </script>
@@ -2007,8 +2875,37 @@ export default {
     }
   }
 
+  /* 站点列表搜索框 */
+  .site-search {
+    width: 200px;
+    margin-right: 8px;
+  }
   .map-wrap {
     position: relative;
+  }
+  /* 站点管理：地图与右侧编辑表单等高 */
+  .site-row {
+    align-items: stretch;
+
+    .panel {
+      width: 100%;
+      height: 100%;
+      margin-bottom: 0;
+      box-sizing: border-box;
+    }
+    .site-map-panel,
+    .site-form-panel {
+      display: flex;
+      flex-direction: column;
+    }
+    .site-map-panel .map-wrap {
+      flex: 1;
+      min-height: 0;
+    }
+    .site-map-panel .map-box {
+      height: 100%;
+      min-height: 420px;
+    }
   }
   .map-search {
     position: absolute;
@@ -2101,8 +2998,17 @@ export default {
 
   .two-col {
     display: flex;
+    align-items: center;
+    width: 100%;
 
-    .el-input + .el-input {
+    > * {
+      flex: 1;
+      min-width: 0;
+    }
+    > .el-switch {
+      flex: 0 0 auto;
+    }
+    > * + * {
       margin-left: 8px;
     }
   }
@@ -2118,6 +3024,70 @@ export default {
 
   .form-actions {
     margin-bottom: 0;
+  }
+
+  // 站点图片上传区
+  .site-img-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .site-img-item,
+  .site-img-add {
+    position: relative;
+    width: 78px;
+    height: 78px;
+    border: 1px dashed #d9d9d9;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    background: #fafafa;
+    transition: border-color 0.2s;
+  }
+  .site-img-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .site-img-del {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 12px;
+    cursor: pointer;
+    z-index: 2;
+  }
+  .site-img-add {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #8c939d;
+    border-style: dashed;
+  }
+  .site-img-add:hover {
+    border-color: #409eff;
+    color: #409eff;
+  }
+  .site-img-add i {
+    font-size: 24px;
+  }
+  .site-img-add__text {
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .site-img-uploading {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #409eff;
   }
 
   ::v-deep .danger-text {
