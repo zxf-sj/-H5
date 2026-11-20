@@ -319,6 +319,13 @@
               <el-button type="primary" size="mini" @click="openLineDialog()"
                 >新建路线</el-button
               >
+              <el-button
+                size="mini"
+                type="success"
+                :loading="lineCopying"
+                @click="copyLine"
+                >复制路线</el-button
+              >
               <el-button size="mini" @click="loadLines()">刷新</el-button>
             </div>
           </div>
@@ -328,7 +335,19 @@
             border
             size="mini"
             style="width: 100%"
+            highlight-current-row
+            @row-click="handleLineRowClick"
           >
+            <el-table-column width="50" align="center">
+              <template slot-scope="scope">
+                <el-radio
+                  :label="scope.row.Id"
+                  v-model="selectedLineId"
+                  class="line-radio"
+                  >&nbsp;</el-radio
+                >
+              </template>
+            </el-table-column>
             <el-table-column prop="LineName" label="路线名称" min-width="130" />
             <el-table-column
               prop="StatingLocation_Name"
@@ -425,6 +444,13 @@
               <el-button type="primary" size="mini" @click="openTplDialog()"
                 >新建模板</el-button
               >
+              <el-button
+                size="mini"
+                type="success"
+                :loading="tplCopying"
+                @click="copyTpl"
+                >复制模板</el-button
+              >
               <el-button size="mini" @click="loadTemplates()">刷新</el-button>
             </div>
           </div>
@@ -435,7 +461,19 @@
             border
             size="mini"
             style="width: 100%"
+            highlight-current-row
+            @row-click="handleTplRowClick"
           >
+            <el-table-column width="50" align="center">
+              <template slot-scope="scope">
+                <el-radio
+                  :label="scope.row.Id"
+                  v-model="selectedTplId"
+                  class="line-radio"
+                  >&nbsp;</el-radio
+                >
+              </template>
+            </el-table-column>
             <el-table-column prop="LineId_Name" label="路线" min-width="120" />
             <el-table-column label="班车时间" min-width="130" align="center">
               <template slot-scope="scope">
@@ -1187,13 +1225,6 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="所属公司">
-          <el-input
-            v-model="vehicleForm.CompanyId"
-            clearable
-            placeholder="选填，CompanyId"
-          />
-        </el-form-item>
         <el-form-item label="是否启用">
           <el-switch
             v-model="vehicleForm.IsUse"
@@ -1330,7 +1361,6 @@ const emptyVehicle = () => ({
   BuyDate: '',
   Remark: null,
   DriverId: '',
-  CompanyId: null,
 })
 
 export default {
@@ -1381,6 +1411,8 @@ export default {
       allLines: [],
       lineDialogVisible: false,
       lineSaving: false,
+      lineCopying: false,
+      selectedLineId: null,
       lineForm: emptyLine(),
       lineRules: {
         LineName: [
@@ -1417,6 +1449,8 @@ export default {
       tplPage: { pageIndex: 1, pageSize: 10 },
       tplDialogVisible: false,
       tplSaving: false,
+      tplCopying: false,
+      selectedTplId: null,
       tplForm: emptyTpl(),
       // 模板下拉数据：路线 / 司机 / 车辆（来自后台字典接口）
       tplLines: [],
@@ -1495,24 +1529,30 @@ export default {
     vehicleTypeOptions() {
       return this.vehicleTypeList.map((item) => ({
         value: pickValue(item, ['Id', 'Value', 'TypeValue', 'VehicleType']),
-        label: pickValue(item, [
-          'Name',
-          'TypeName',
-          'VehicleType_Name',
-          'Title',
-        ]),
+        label:
+          pickValue(item, [
+            'Name',
+            'TypeName',
+            'VehicleType_Name',
+            'Title',
+            'Text',
+            'Remark',
+          ]) || String(item.Id ?? item.Value ?? ''),
       }))
     },
     // 车辆状态下拉：/BusOrder/BusCarStatusList
     vehicleStatusOptions() {
       return this.vehicleStatusList.map((item) => ({
         value: pickValue(item, ['Id', 'Value', 'Status', 'CarStatus']),
-        label: pickValue(item, [
-          'Name',
-          'StatusName',
-          'CarStatus_Name',
-          'Title',
-        ]),
+        label:
+          pickValue(item, [
+            'Name',
+            'StatusName',
+            'CarStatus_Name',
+            'Title',
+            'Text',
+            'Remark',
+          ]) || String(item.Id ?? item.Value ?? ''),
       }))
     },
   },
@@ -1535,6 +1575,7 @@ export default {
     this.loadTemplates()
     this.loadTplOptions()
     this.loadLocationRoles()
+    this.loadVehicleDicts()
   },
   activated() {
     if (this.activeTab === 'site') this.$nextTick(this.resizeMap)
@@ -2460,6 +2501,49 @@ export default {
       }
     },
 
+    // 路线列表单选：点击行同步选中 radio
+    handleLineRowClick(row) {
+      if (row && row.Id) this.selectedLineId = row.Id
+    },
+
+    // 复制路线：GET /BusOrder/BusLineCopy?Id=
+    async copyLine() {
+      if (!this.selectedLineId) {
+        Message.warning('请先选中一条路线')
+        return
+      }
+      const row = this.lineList.find((i) => i.Id === this.selectedLineId)
+      try {
+        await this.$confirm(
+          `确定复制路线「${row ? row.LineName : this.selectedLineId}」吗？`,
+          '提示',
+          {
+            type: 'warning',
+            confirmButtonText: '复制',
+            cancelButtonText: '取消',
+          },
+        )
+      } catch (e) {
+        return // 取消
+      }
+      this.lineCopying = true
+      try {
+        await request({
+          url: '/BusOrder/BusLineCopy',
+          method: 'get',
+          params: { Id: this.selectedLineId },
+        })
+        Message.success('复制成功')
+        this.selectedLineId = null
+        this.loadLines()
+        this.loadAllLines()
+      } catch (e) {
+        // 拦截器已提示
+      } finally {
+        this.lineCopying = false
+      }
+    },
+
     // 删除路线：GET /BusOrder/BusLineDelete?Id=
     async removeLine(row) {
       try {
@@ -2486,6 +2570,52 @@ export default {
         this.loadAllLines()
       } catch (e) {
         // 拦截器已提示
+      }
+    },
+
+    // 班车模板列表单选：点击行同步选中 radio
+    handleTplRowClick(row) {
+      if (row && row.Id) this.selectedTplId = row.Id
+    },
+
+    // 复制班车模板：GET /BusOrder/CopyBusLineTemplate?Id=
+    async copyTpl() {
+      if (!this.selectedTplId) {
+        Message.warning('请先选中一条班车模板')
+        return
+      }
+      const row = this.filteredTemplates.find(
+        (i) => i.Id === this.selectedTplId,
+      )
+      try {
+        await this.$confirm(
+          `确定复制班车模板（${row ? row.LineId_Name || '该路线' : '该'} ${
+            row ? row.StartTime || '' : ''
+          } ~ ${row ? row.EndTime || '' : ''}）吗？`,
+          '提示',
+          {
+            type: 'warning',
+            confirmButtonText: '复制',
+            cancelButtonText: '取消',
+          },
+        )
+      } catch (e) {
+        return // 取消
+      }
+      this.tplCopying = true
+      try {
+        await request({
+          url: '/BusOrder/CopyBusLineTemplate',
+          method: 'get',
+          params: { Id: this.selectedTplId },
+        })
+        Message.success('复制成功')
+        this.selectedTplId = null
+        this.loadTemplates()
+      } catch (e) {
+        // 拦截器已提示
+      } finally {
+        this.tplCopying = false
       }
     },
 
@@ -2762,7 +2892,7 @@ export default {
     },
     // 新建 / 编辑车辆：编辑时先拉详情
     async openVehicleDialog(row) {
-      this.loadVehicleDicts()
+      await this.loadVehicleDicts()
       if (!this.tplDrivers.length) this.loadTplOptions()
       if (row && row.Id) {
         try {
@@ -2785,7 +2915,6 @@ export default {
             BuyDate: (detail.BuyDate || '').slice(0, 10),
             Remark: detail.Remark == null ? null : detail.Remark,
             DriverId: detail.DriverId || '',
-            CompanyId: detail.CompanyId == null ? null : detail.CompanyId,
           })
         } catch (e) {
           return
@@ -2811,7 +2940,6 @@ export default {
           BuyDate: this.vehicleForm.BuyDate || null,
           Remark: this.vehicleForm.Remark || null,
           DriverId: this.vehicleForm.DriverId || null,
-          CompanyId: this.vehicleForm.CompanyId || null,
         }
         try {
           if (this.vehicleForm.Id) {
@@ -3106,6 +3234,13 @@ export default {
   }
   ::v-deep .el-alert {
     margin-bottom: 10px;
+  }
+  // 路线列表单选框：隐藏 radio 文字，只留圆圈居中
+  .line-radio {
+    margin: 0;
+    ::v-deep .el-radio__label {
+      display: none;
+    }
   }
 }
 </style>
